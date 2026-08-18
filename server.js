@@ -1,135 +1,418 @@
-// FELIX CHAT SERVER
-// Run: npm install && npm start
-// This is the small persistent backend Felix Chat needs.
-// It stores accounts, friends, messages, and online connections.
+const express = require("express");
+const http = require("http");
+const WebSocket = require("ws");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 
-const express=require("express");
-const http=require("http");
-const WebSocket=require("ws");
-const crypto=require("crypto");
-const fs=require("fs");
-const path=require("path");
+const PORT = process.env.PORT || 3000;
+const DATA = path.join(__dirname, "data.json");
 
-const PORT=process.env.PORT||3000;
-const DATA=path.join(__dirname,"data.json");
-let db={users:{},messages:{}};
-try{if(fs.existsSync(DATA))db=JSON.parse(fs.readFileSync(DATA,"utf8"))}catch{}
+let db = { users: {}, messages: {} };
 
-const save=()=>fs.writeFileSync(DATA,JSON.stringify(db,null,2));
-const id=()=>crypto.randomBytes(16).toString("hex");
-const clean=s=>String(s||"").trim().slice(0,32);
-const hash=(p,s)=>crypto.createHash("sha256").update(s+":"+p).digest("hex");
-const sockets=new Map();
+try {
+  if (fs.existsSync(DATA)) {
+    db = JSON.parse(fs.readFileSync(DATA, "utf8"));
+  }
+} catch {}
 
-const app=express();
-app.use(express.json({limit:"2mb"}));
-app.use(express.static(path.join(__dirname,"public")));
+const save = () =>
+  fs.writeFileSync(DATA, JSON.stringify(db, null, 2));
 
-function auth(req,res,next){
- const token=req.headers.authorization?.replace("Bearer ","");
- const uid=Object.keys(db.users).find(x=>db.users[x].token===token);
- if(!uid)return res.status(401).json({error:"Not logged in"});
- req.uid=uid;next();
+const id = () =>
+  crypto.randomBytes(16).toString("hex");
+
+const clean = s =>
+  String(s || "").trim().slice(0, 32);
+
+const hash = (password, salt) =>
+  crypto
+    .createHash("sha256")
+    .update(salt + ":" + password)
+    .digest("hex");
+
+const sockets = new Map();
+
+const app = express();
+
+app.use(express.json({ limit: "2mb" }));
+
+app.use(express.static(path.join(__dirname, "public")));
+
+function auth(req, res, next) {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+
+  const uid = Object.keys(db.users).find(
+    id => db.users[id].token === token
+  );
+
+  if (!uid) {
+    return res.status(401).json({
+      error: "Not logged in"
+    });
+  }
+
+  req.uid = uid;
+  next();
 }
 
-app.post("/api/register",(req,res)=>{
- const username=clean(req.body.username).toLowerCase();
- const password=String(req.body.password||"");
- if(!/^[a-z0-9_]{3,20}$/.test(username))return res.status(400).json({error:"Username must be 3-20 letters, numbers or _"});
- if(password.length<6)return res.status(400).json({error:"Password must be at least 6 characters"});
- if(Object.values(db.users).some(u=>u.username===username))return res.status(409).json({error:"Username already exists"});
- const uid=id(),salt=id(),token=id();
- db.users[uid]={username,hash:hash(password,salt),salt,token,friends:[]};save();
- res.json({token,username});
+/* CREATE ACCOUNT */
+
+app.post("/api/register", (req, res) => {
+  const username = clean(req.body.username).toLowerCase();
+  const password = String(req.body.password || "");
+
+  if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+    return res.status(400).json({
+      error: "Username must be 3-20 letters, numbers or _"
+    });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({
+      error: "Password must be at least 6 characters"
+    });
+  }
+
+  if (
+    Object.values(db.users).some(
+      user => user.username === username
+    )
+  ) {
+    return res.status(409).json({
+      error: "Username already exists"
+    });
+  }
+
+  const uid = id();
+  const salt = id();
+  const token = id();
+
+  db.users[uid] = {
+    username,
+    hash: hash(password, salt),
+    salt,
+    token,
+    friends: [],
+    incoming: []
+  };
+
+  save();
+
+  res.json({
+    token,
+    username
+  });
 });
 
-app.post("/api/login",(req,res)=>{
- const username=clean(req.body.username).toLowerCase(),password=String(req.body.password||"");
- const entry=Object.entries(db.users).find(([_,u])=>u.username===username);
- if(!entry)return res.status(401).json({error:"Wrong username or password"});
- const [uid,u]=entry;
- if(u.hash!==hash(password,u.salt))return res.status(401).json({error:"Wrong username or password"});
- u.token=id();save();res.json({token:u.token,username:u.username});
+/* LOGIN */
+
+app.post("/api/login", (req, res) => {
+  const username = clean(req.body.username).toLowerCase();
+  const password = String(req.body.password || "");
+
+  const entry = Object.entries(db.users).find(
+    ([_, user]) => user.username === username
+  );
+
+  if (
+    !entry ||
+    entry[1].hash !== hash(password, entry[1].salt)
+  ) {
+    return res.status(401).json({
+      error: "Wrong username or password"
+    });
+  }
+
+  entry[1].token = id();
+
+  save();
+
+  res.json({
+    token: entry[1].token,
+    username
+  });
 });
 
-app.get("/api/me",auth,(req,res)=>{
- const u=db.users[req.uid];
- res.json({username:u.username,friends:u.friends.map(fid=>({username:db.users[fid]?.username||"Unknown",uid:fid,online:sockets.has(fid)}))});
+/* USER INFO + FRIEND REQUESTS */
+
+app.get("/api/me", auth, (req, res) => {
+  const user = db.users[req.uid];
+
+  res.json({
+    uid: req.uid,
+    username: user.username,
+
+    friends: user.friends.map(friendId => ({
+      uid: friendId,
+      username: db.users[friendId]?.username || "Unknown",
+      online: sockets.has(friendId)
+    })),
+
+    requests: (user.incoming || [])
+      .map(id => ({
+        uid: id,
+        username: db.users[id]?.username
+      }))
+      .filter(x => x.username)
+  });
 });
 
-app.post("/api/friends/request",auth,(req,res)=>{
- const target=Object.entries(db.users).find(([_,u])=>u.username===clean(req.body.username).toLowerCase());
- if(!target)return res.status(404).json({error:"User not found"});
- if(target[0]===req.uid)return res.status(400).json({error:"That's you"});
- const u=db.users[req.uid],t=db.users[target[0]];
- u.requests=u.requests||[];t.incoming=t.incoming||[];
- if(u.friends.includes(target[0]))return res.json({ok:true,message:"Already friends"});
- if(!t.incoming.includes(req.uid))t.incoming.push(req.uid);
- save();push(target[0],{type:"friend_request",from:u.username});
- res.json({ok:true});
+/* SEND FRIEND REQUEST */
+
+app.post("/api/friends/request", auth, (req, res) => {
+  const username =
+    clean(req.body.username).toLowerCase();
+
+  const entry = Object.entries(db.users).find(
+    ([_, user]) => user.username === username
+  );
+
+  if (!entry) {
+    return res.status(404).json({
+      error: "User not found"
+    });
+  }
+
+  const [targetId, target] = entry;
+  const user = db.users[req.uid];
+
+  if (targetId === req.uid) {
+    return res.status(400).json({
+      error: "You can't add yourself"
+    });
+  }
+
+  if (user.friends.includes(targetId)) {
+    return res.json({
+      ok: true,
+      message: "Already friends"
+    });
+  }
+
+  target.incoming = target.incoming || [];
+
+  if (!target.incoming.includes(req.uid)) {
+    target.incoming.push(req.uid);
+  }
+
+  save();
+
+  push(targetId, {
+    type: "friend_request",
+    from: user.username
+  });
+
+  res.json({
+    ok: true
+  });
 });
 
-app.get("/api/friends/requests",auth,(req,res)=>{
- const u=db.users[req.uid];u.incoming=u.incoming||[];
- res.json(u.incoming.map(x=>({uid:x,username:db.users[x]?.username})).filter(x=>x.username));
+/* ACCEPT FRIEND REQUEST */
+
+app.post("/api/friends/accept", auth, (req, res) => {
+  const otherId = req.body.uid;
+
+  const user = db.users[req.uid];
+  const other = db.users[otherId];
+
+  if (!other) {
+    return res.status(404).json({
+      error: "User not found"
+    });
+  }
+
+  user.incoming =
+    (user.incoming || []).filter(
+      id => id !== otherId
+    );
+
+  if (!user.friends.includes(otherId)) {
+    user.friends.push(otherId);
+  }
+
+  if (!other.friends.includes(req.uid)) {
+    other.friends.push(req.uid);
+  }
+
+  save();
+
+  push(otherId, {
+    type: "friend_accepted",
+    username: user.username
+  });
+
+  res.json({
+    ok: true
+  });
 });
 
-app.post("/api/friends/accept",auth,(req,res)=>{
- const other=req.body.uid,u=db.users[req.uid],o=db.users[other];
- if(!o)return res.status(404).json({error:"User not found"});
- u.incoming=(u.incoming||[]).filter(x=>x!==other);
- if(!u.friends.includes(other))u.friends.push(other);
- if(!o.friends.includes(req.uid))o.friends.push(req.uid);
- save();push(other,{type:"friend_accepted",username:u.username});
- res.json({ok:true});
+/* DECLINE FRIEND REQUEST */
+
+app.post("/api/friends/decline", auth, (req, res) => {
+  const user = db.users[req.uid];
+
+  user.incoming =
+    (user.incoming || []).filter(
+      id => id !== req.body.uid
+    );
+
+  save();
+
+  res.json({
+    ok: true
+  });
 });
 
-app.get("/api/messages/:uid",auth,(req,res)=>{
- const other=req.params.uid;
- if(!db.users[other]||!db.users[req.uid].friends.includes(other))return res.status(403).json({error:"Not friends"});
- const k=[req.uid,other].sort().join(":");
- res.json(db.messages[k]||[]);
+/* GET MESSAGES */
+
+app.get("/api/messages/:uid", auth, (req, res) => {
+  const otherId = req.params.uid;
+
+  if (
+    !db.users[otherId] ||
+    !db.users[req.uid].friends.includes(otherId)
+  ) {
+    return res.status(403).json({
+      error: "Not friends"
+    });
+  }
+
+  const key = [req.uid, otherId]
+    .sort()
+    .join(":");
+
+  res.json(db.messages[key] || []);
 });
 
-app.post("/api/messages/:uid",auth,(req,res)=>{
- const other=req.params.uid,u=db.users[req.uid];
- if(!u.friends.includes(other))return res.status(403).json({error:"Not friends"});
- const text=String(req.body.text||"").trim().slice(0,4000);
- if(!text)return res.status(400).json({error:"Empty message"});
- const k=[req.uid,other].sort().join(":");
- db.messages[k]=db.messages[k]||[];
- const m={id:id(),from:req.uid,text,time:Date.now()};
- db.messages[k].push(m);db.messages[k]=db.messages[k].slice(-1000);save();
- push(other,{type:"message",message:m});
- res.json(m);
+/* SEND MESSAGE */
+
+app.post("/api/messages/:uid", auth, (req, res) => {
+  const otherId = req.params.uid;
+  const user = db.users[req.uid];
+
+  if (!user.friends.includes(otherId)) {
+    return res.status(403).json({
+      error: "Not friends"
+    });
+  }
+
+  const text =
+    String(req.body.text || "")
+      .trim()
+      .slice(0, 4000);
+
+  if (!text) {
+    return res.status(400).json({
+      error: "Empty message"
+    });
+  }
+
+  const key = [req.uid, otherId]
+    .sort()
+    .join(":");
+
+  const message = {
+    id: id(),
+    from: req.uid,
+    text,
+    time: Date.now()
+  };
+
+  db.messages[key] =
+    db.messages[key] || [];
+
+  db.messages[key].push(message);
+
+  db.messages[key] =
+    db.messages[key].slice(-1000);
+
+  save();
+
+  push(otherId, {
+    type: "message",
+    message
+  });
+
+  res.json(message);
 });
 
-app.post("/api/voice/:uid",auth,(req,res)=>{
- const other=req.params.uid,u=db.users[req.uid];
- if(!u.friends.includes(other))return res.status(403).json({error:"Not friends"});
- const data=String(req.body.data||"");
- if(data.length>1500000)return res.status(413).json({error:"Voice note too large"});
- const k=[req.uid,other].sort().join(":");
- db.messages[k]=db.messages[k]||[];
- const m={id:id(),from:req.uid,voice:data,time:Date.now()};
- db.messages[k].push(m);db.messages[k]=db.messages[k].slice(-1000);save();
- push(other,{type:"message",message:m});res.json(m);
-});
+/* WEBSOCKET */
 
-const server=http.createServer(app);
-const wss=new WebSocket.Server({server,path:"/ws"});
-wss.on("connection",(ws)=>{
- let uid=null;
- ws.on("message",raw=>{
-   try{
-    const m=JSON.parse(raw);
-    if(m.type==="auth"){
-      uid=Object.keys(db.users).find(x=>db.users[x].token===m.token);
-      if(uid){sockets.set(uid,ws);ws.send(JSON.stringify({type:"ready"}))}
+const server = http.createServer(app);
+
+const wss =
+  new WebSocket.Server({
+    server,
+    path: "/ws"
+  });
+
+wss.on("connection", ws => {
+
+  let uid = null;
+
+  ws.on("message", raw => {
+
+    try {
+
+      const message =
+        JSON.parse(raw);
+
+      if (message.type === "auth") {
+
+        uid = Object.keys(db.users).find(
+          id =>
+            db.users[id].token ===
+            message.token
+        );
+
+        if (uid) {
+
+          sockets.set(uid, ws);
+
+          ws.send(
+            JSON.stringify({
+              type: "ready"
+            })
+          );
+        }
+      }
+
+    } catch {}
+  });
+
+  ws.on("close", () => {
+
+    if (
+      uid &&
+      sockets.get(uid) === ws
+    ) {
+      sockets.delete(uid);
     }
-   }catch{}
- });
- ws.on("close",()=>{if(uid&&sockets.get(uid)===ws)sockets.delete(uid)});
+
+  });
+
 });
-function push(uid,m){const ws=sockets.get(uid);if(ws?.readyState===1)ws.send(JSON.stringify(m))}
-server.listen(PORT,()=>console.log("Felix Chat server running on port "+PORT));
+
+/* SEND REAL-TIME EVENT */
+
+function push(uid, message) {
+
+  const ws = sockets.get(uid);
+
+  if (
+    ws &&
+    ws.readyState === 1
+  ) {
+    ws.send(
+      JSON.stringify(message)
+    );
+  }
+
+}
+
+server.listen(PORT, () => {
+  console.log(
+    "Felix Chat running on " + PORT
+  );
+});
