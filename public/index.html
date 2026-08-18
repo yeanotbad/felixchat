@@ -1,38 +1,1309 @@
-<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+name="viewport"
+content="width=device-width,initial-scale=1"
+/>
+
 <title>Felix Chat</title>
+
 <style>
-*{box-sizing:border-box}body{margin:0;height:100dvh;background:#070914;color:#fff;font-family:Arial,sans-serif}.app{height:100%;display:flex;background:radial-gradient(circle at 80% 0,#29366d,#070914 48%)}aside{width:300px;background:#0d1220f5;border-right:1px solid #293650;padding:15px;display:flex;flex-direction:column;gap:10px}.brand{font-size:24px;font-weight:900;display:flex;gap:10px;align-items:center}.logo,.av{display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#7658ff,#19d9ff);font-weight:900}.logo{width:44px;height:44px}.profile{display:flex;gap:10px;align-items:center;padding:10px;background:#151c30;border:1px solid #293650;border-radius:14px}.av{width:42px;height:42px;border-radius:50%;flex:none}.input,.btn{width:100%;padding:12px;border-radius:12px}.input{border:1px solid #2c3854;background:#11192c;color:#fff;outline:0}.btn{border:1px solid #2c3854;background:#151e33;color:#fff;font-weight:700}.primary{border:0;background:linear-gradient(135deg,#7257ff,#278cff)}.small{font-size:12px;color:#8f9db7}.green{color:#49e79a}.friend{display:flex;gap:10px;align-items:center;padding:10px;border-radius:13px;cursor:pointer}.friend.active,.friend:hover{background:#1b2742}.chat{flex:1;min-width:0;display:flex;flex-direction:column}.head{height:70px;padding:10px 18px;display:flex;align-items:center;border-bottom:1px solid #293650;background:#0b1020}.messages{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:9px}.empty{margin:auto;text-align:center;color:#8795ae;line-height:1.7}.bubble{max-width:78%;padding:11px 14px;border-radius:18px;background:#151e32;border:1px solid #293650;word-break:break-word}.mine{align-self:flex-end;background:linear-gradient(135deg,#7055ff,#287eff);border:0}.composer{display:flex;gap:8px;padding:9px;padding-bottom:max(9px,env(safe-area-inset-bottom));border-top:1px solid #293650;background:#0b1020}.send{padding:0 16px;border:0;border-radius:13px;background:linear-gradient(135deg,#7257ff,#278cff);color:#fff;font-weight:800}.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#000b;padding:18px}.box{width:min(480px,100%);background:#10182a;border:1px solid #30405f;border-radius:22px;padding:22px}.row{display:flex;gap:8px}.row>*{flex:1}@media(max-width:700px){aside{width:76px;padding:9px}.brand span,.profile>div:not(.av),aside .input,aside .btn:not(.primary),aside .small,.friend>div:not(.av){display:none}.brand,.profile,.friend{justify-content:center}.head{height:64px}.bubble{max-width:90%}}
-</style></head>
-<body><div class="app"><aside>
-<div class="brand"><div class="logo">F</div><span>Felix Chat</span></div>
-<div class="profile"><div class="av" id="myav">F</div><div><b id="myname">You</b><div class="small green">● Online</div></div></div>
-<div id="authArea"></div><div id="friendList"></div><div style="flex:1"></div>
-<button class="btn primary" onclick="addFriend()">＋ Add friend</button><button class="btn" onclick="logout()">Log out</button>
-</aside><main class="chat"><header class="head"><div class="profile" style="border:0;background:transparent"><div class="av" id="fav">?</div><div><b id="fname">Felix Chat</b><div id="fstatus" class="small">Log in to chat</div></div></div></header>
-<section class="messages" id="msgs"><div class="empty">💬 Felix Chat<br><br>Log in or create an account to start.</div></section>
-<footer class="composer"><input id="text" class="input" disabled placeholder="Message…"><button class="send" onclick="send()">Send</button></footer></main></div>
-<div class="modal" id="modal"><div class="box" id="box"></div></div>
-<script>
-const API=location.origin+"/api";let token=localStorage.getItem("felix_token"),me=null,active=null,ws=null;
-const $=x=>document.getElementById(x);const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));const initials=s=>(s||"?").slice(0,2).toUpperCase();
-async function api(url,opt={}){opt.headers={"Content-Type":"application/json",...(opt.headers||{})};if(token)opt.headers.Authorization="Bearer "+token;let r=await fetch(API+url,opt),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}
-function modal(h){$("box").innerHTML=h;$("modal").style.display="flex"}function close(){ $("modal").style.display="none"}
-function auth(){
- if(token)return load();
- modal(`<h2>👋 Welcome to Felix Chat</h2><p>Create an account or log in. Your friends and messages are stored on the Felix Chat server, so they don't disappear when you refresh or switch devices.</p><input id="u" class="input" placeholder="Username (3-20 letters/numbers/_)" autocomplete="username"><br><br><input id="p" type="password" class="input" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="row" style="margin-top:10px"><button class="btn primary" onclick="register()">Create account</button><button class="btn" onclick="login()">Log in</button></div>`)
+
+*{
+box-sizing:border-box;
 }
-async function register(){try{let d=await api("/register",{method:"POST",body:JSON.stringify({username:$("u").value,password:$("p").value})});token=d.token;localStorage.setItem("felix_token",token);close();load()}catch(e){alert(e.message)}}
-async function login(){try{let d=await api("/login",{method:"POST",body:JSON.stringify({username:$("u").value,password:$("p").value})});token=d.token;localStorage.setItem("felix_token",token);close();load()}catch(e){alert(e.message)}}
-async function load(){try{me=await api("/me");$("myname").textContent="@"+me.username;$("myav").textContent=initials(me.username);renderFriends();connectWS()}catch(e){token=null;localStorage.removeItem("felix_token");auth()}}
-function renderFriends(){let x=$("friendList");x.innerHTML="";if(!me.friends.length){x.innerHTML='<div class="small">No friends yet.</div>';return}me.friends.forEach(f=>{let d=document.createElement("div");d.className="friend "+(active?.uid===f.uid?"active":"");d.innerHTML=`<div class="av" style="width:38px;height:38px">${initials(f.username)}</div><div><b>@${esc(f.username)}</b><div class="small">${f.online?"● Online":"○ Offline"}</div></div>`;d.onclick=()=>select(f);x.appendChild(d)})}
-function connectWS(){try{ws?.close()}catch{};let proto=location.protocol==="https:"?"wss":"ws";ws=new WebSocket(proto+"://"+location.host+"/ws");ws.onopen=()=>ws.send(JSON.stringify({type:"auth",token}));ws.onmessage=e=>{let m=JSON.parse(e.data);if(m.type==="message"&&active)loadMessages();if(m.type==="friend_request"||m.type==="friend_accepted")load()};ws.onclose=()=>setTimeout(()=>token&&connectWS(),2000)}
-async function select(f){active=f;$("fname").textContent="@"+f.username;$("fav").textContent=initials(f.username);$("fstatus").textContent=f.online?"● Online":"○ Offline";$("fstatus").className="small "+(f.online?"green":"");$("text").disabled=!f.online;renderFriends();loadMessages()}
-async function loadMessages(){if(!active)return;let a=await api("/messages/"+active.uid);$("msgs").innerHTML="";if(!a.length){$("msgs").innerHTML='<div class="empty">💬 No messages yet.<br><br>Say hello!</div>';return}a.forEach(m=>{let d=document.createElement("div");d.className="bubble "+(m.from===me.uid?"mine":"");if(m.voice){let au=document.createElement("audio");au.controls=true;au.src=m.voice;d.appendChild(au)}else d.appendChild(document.createTextNode(m.text));$("msgs").appendChild(d)});$("msgs").scrollTop=$("msgs").scrollHeight}
-async function send(){if(!active)return;let t=$("text").value.trim();if(!t)return;try{await api("/messages/"+active.uid,{method:"POST",body:JSON.stringify({text:t})});$("text").value="";loadMessages()}catch(e){alert(e.message)}}
-$("text").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();send()}}
-async function addFriend(){modal(`<h2>👥 Add friend</h2><p>Enter your friend's Felix username.</p><input id="adduser" class="input" placeholder="username"><div class="row" style="margin-top:10px"><button class="btn" onclick="close()">Cancel</button><button class="btn primary" onclick="requestFriend()">Send request</button></div>`)}
-async function requestFriend(){try{await api("/friends/request",{method:"POST",body:JSON.stringify({username:$("adduser").value})});close();alert("Friend request sent!")}catch(e){alert(e.message)}}
-function logout(){token=null;localStorage.removeItem("felix_token");location.reload()}
-auth();
-</script></body></html>
+
+body{
+margin:0;
+height:100vh;
+font-family:Arial,sans-serif;
+background:#080b16;
+color:white;
+}
+
+.app{
+height:100%;
+display:flex;
+}
+
+.sidebar{
+width:300px;
+background:#0d1220;
+border-right:1px solid #293650;
+padding:15px;
+display:flex;
+flex-direction:column;
+gap:10px;
+}
+
+.logo{
+font-size:25px;
+font-weight:900;
+margin-bottom:5px;
+}
+
+.profile{
+display:flex;
+align-items:center;
+gap:10px;
+padding:10px;
+border-radius:14px;
+background:#151c30;
+}
+
+.avatar{
+width:42px;
+height:42px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:bold;
+background:linear-gradient(
+135deg,
+#7658ff,
+#19d9ff
+);
+}
+
+.small{
+font-size:12px;
+color:#8f9db7;
+}
+
+.online{
+color:#49e79a;
+}
+
+button{
+border:0;
+cursor:pointer;
+}
+
+.btn{
+width:100%;
+padding:12px;
+border-radius:12px;
+background:#151e33;
+border:1px solid #2c3854;
+color:white;
+font-weight:bold;
+}
+
+.primary{
+background:linear-gradient(
+135deg,
+#7257ff,
+#278cff
+);
+}
+
+.request-button{
+position:relative;
+}
+
+.badge{
+position:absolute;
+right:8px;
+top:7px;
+background:#ff496c;
+border-radius:20px;
+padding:2px 7px;
+font-size:11px;
+}
+
+.friends{
+overflow:auto;
+}
+
+.friend{
+display:flex;
+align-items:center;
+gap:10px;
+padding:10px;
+border-radius:13px;
+cursor:pointer;
+}
+
+.friend:hover,
+.friend.active{
+background:#1b2742;
+}
+
+.chat{
+flex:1;
+display:flex;
+flex-direction:column;
+min-width:0;
+}
+
+.chat-header{
+height:70px;
+padding:10px 18px;
+display:flex;
+align-items:center;
+border-bottom:1px solid #293650;
+}
+
+.messages{
+flex:1;
+overflow:auto;
+padding:18px;
+display:flex;
+flex-direction:column;
+gap:10px;
+}
+
+.empty{
+margin:auto;
+text-align:center;
+color:#8795ae;
+}
+
+.message{
+max-width:75%;
+padding:11px 14px;
+border-radius:18px;
+background:#151e32;
+}
+
+.message.mine{
+align-self:flex-end;
+background:linear-gradient(
+135deg,
+#7055ff,
+#287eff
+);
+}
+
+.composer{
+display:flex;
+gap:8px;
+padding:10px;
+border-top:1px solid #293650;
+}
+
+.message-input{
+flex:1;
+padding:13px;
+border-radius:13px;
+border:1px solid #2c3854;
+background:#11192c;
+color:white;
+outline:none;
+}
+
+.send{
+padding:0 18px;
+border-radius:13px;
+background:#7257ff;
+color:white;
+font-weight:bold;
+}
+
+.modal{
+position:fixed;
+inset:0;
+background:#000b;
+display:none;
+align-items:center;
+justify-content:center;
+padding:18px;
+}
+
+.modal-box{
+width:min(500px,100%);
+background:#10182a;
+border:1px solid #30405f;
+border-radius:22px;
+padding:22px;
+}
+
+.input{
+width:100%;
+padding:12px;
+border-radius:12px;
+border:1px solid #2c3854;
+background:#11192c;
+color:white;
+}
+
+.row{
+display:flex;
+gap:8px;
+margin-top:10px;
+}
+
+.row>*{
+flex:1;
+}
+
+.request{
+display:flex;
+align-items:center;
+gap:10px;
+padding:12px;
+background:#151e32;
+border-radius:13px;
+margin:8px 0;
+}
+
+@media(max-width:700px){
+
+.sidebar{
+width:76px;
+padding:9px;
+}
+
+.logo{
+font-size:0;
+}
+
+.logo:first-letter{
+font-size:25px;
+}
+
+.profile{
+justify-content:center;
+}
+
+.profile-info{
+display:none;
+}
+
+.friend{
+justify-content:center;
+}
+
+.friend-info{
+display:none;
+}
+
+.sidebar .btn{
+font-size:0;
+}
+
+.sidebar .primary{
+font-size:20px;
+}
+
+.chat-header{
+height:64px;
+}
+
+.message{
+max-width:90%;
+}
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="app">
+
+<aside class="sidebar">
+
+<div class="logo">
+💬 Felix Chat
+</div>
+
+<div class="profile">
+
+<div
+class="avatar"
+id="myAvatar"
+>
+F
+</div>
+
+<div class="profile-info">
+
+<b id="myName">
+You
+</b>
+
+<div class="small online">
+● Online
+</div>
+
+</div>
+
+</div>
+
+<button
+class="btn request-button"
+onclick="showRequests()"
+>
+
+🔔 Friend Requests
+
+<span
+id="requestBadge"
+class="badge"
+style="display:none"
+>
+0
+</span>
+
+</button>
+
+<div
+id="friends"
+class="friends"
+>
+</div>
+
+<div style="flex:1">
+</div>
+
+<button
+class="btn primary"
+onclick="addFriend()"
+>
+＋ Add Friend
+</button>
+
+<button
+class="btn"
+onclick="logout()"
+>
+Log Out
+</button>
+
+</aside>
+
+<main class="chat">
+
+<header class="chat-header">
+
+<div class="profile">
+
+<div
+class="avatar"
+id="friendAvatar"
+>
+?
+</div>
+
+<div>
+
+<b id="friendName">
+Felix Chat
+</b>
+
+<div
+class="small"
+id="friendStatus"
+>
+Choose a friend
+</div>
+
+</div>
+
+</div>
+
+</header>
+
+<section
+id="messages"
+class="messages"
+>
+
+<div class="empty">
+
+👋 Welcome to Felix Chat
+
+<br><br>
+
+Add a friend to start chatting.
+
+</div>
+
+</section>
+
+<footer class="composer">
+
+<input
+id="messageInput"
+class="message-input"
+placeholder="Message..."
+disabled
+/>
+
+<button
+class="send"
+onclick="sendMessage()"
+>
+Send
+</button>
+
+</footer>
+
+</main>
+
+</div>
+
+
+<div
+id="modal"
+class="modal"
+>
+
+<div
+id="modalBox"
+class="modal-box"
+>
+</div>
+
+</div>
+
+
+<script>
+
+const API =
+location.origin + "/api";
+
+let token =
+localStorage.getItem("felix_token");
+
+let me = null;
+
+let activeFriend = null;
+
+let socket = null;
+
+
+function $(id){
+return document.getElementById(id);
+}
+
+
+function initials(name){
+
+return (name || "?")
+.slice(0,2)
+.toUpperCase();
+
+}
+
+
+function openModal(html){
+
+$("modalBox").innerHTML =
+html;
+
+$("modal").style.display =
+"flex";
+
+}
+
+
+function closeModal(){
+
+$("modal").style.display =
+"none";
+
+}
+
+
+async function api(url,options={}){
+
+options.headers = {
+
+"Content-Type":
+"application/json",
+
+...(options.headers || {})
+
+};
+
+if(token){
+
+options.headers.Authorization =
+"Bearer " + token;
+
+}
+
+const response =
+await fetch(API + url,options);
+
+const data =
+await response.json()
+.catch(()=>({}));
+
+if(!response.ok){
+
+throw new Error(
+data.error ||
+"Something went wrong"
+);
+
+}
+
+return data;
+
+}
+
+
+/* LOGIN */
+
+function loginScreen(){
+
+openModal(`
+
+<h2>💬 Felix Chat</h2>
+
+<p>Create an account or log in.</p>
+
+<input
+id="username"
+class="input"
+placeholder="Username"
+/>
+
+<br><br>
+
+<input
+id="password"
+class="input"
+type="password"
+placeholder="Password"
+/>
+
+<div class="row">
+
+<button
+class="btn primary"
+onclick="register()"
+>
+Create Account
+</button>
+
+<button
+class="btn"
+onclick="login()"
+>
+Log In
+</button>
+
+</div>
+
+`);
+
+}
+
+
+async function register(){
+
+try{
+
+const data =
+await api(
+"/register",
+{
+method:"POST",
+body:JSON.stringify({
+
+username:
+$("username").value,
+
+password:
+$("password").value
+
+})
+}
+);
+
+token =
+data.token;
+
+localStorage.setItem(
+"felix_token",
+token
+);
+
+closeModal();
+
+loadUser();
+
+}
+
+catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+async function login(){
+
+try{
+
+const data =
+await api(
+"/login",
+{
+method:"POST",
+body:JSON.stringify({
+
+username:
+$("username").value,
+
+password:
+$("password").value
+
+})
+}
+);
+
+token =
+data.token;
+
+localStorage.setItem(
+"felix_token",
+token
+);
+
+closeModal();
+
+loadUser();
+
+}
+
+catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* LOAD USER */
+
+async function loadUser(){
+
+try{
+
+me =
+await api("/me");
+
+$("myName").textContent =
+"@" + me.username;
+
+$("myAvatar").textContent =
+initials(me.username);
+
+renderFriends();
+
+connectSocket();
+
+}
+
+catch{
+
+localStorage.removeItem(
+"felix_token"
+);
+
+token = null;
+
+loginScreen();
+
+}
+
+}
+
+
+/* FRIEND LIST */
+
+function renderFriends(){
+
+const container =
+$("friends");
+
+container.innerHTML = "";
+
+me.friends.forEach(friend => {
+
+const element =
+document.createElement("div");
+
+element.className =
+"friend";
+
+if(
+activeFriend &&
+activeFriend.uid === friend.uid
+){
+
+element.classList.add(
+"active"
+);
+
+}
+
+element.innerHTML = `
+
+<div class="avatar">
+
+${initials(friend.username)}
+
+</div>
+
+<div class="friend-info">
+
+<b>
+@${friend.username}
+</b>
+
+<div class="small">
+
+${friend.online
+? "● Online"
+: "○ Offline"}
+
+</div>
+
+</div>
+
+`;
+
+element.onclick =
+()=>selectFriend(friend);
+
+container.appendChild(element);
+
+});
+
+
+const count =
+me.requests.length;
+
+$("requestBadge").textContent =
+count;
+
+$("requestBadge").style.display =
+count
+? "block"
+: "none";
+
+}
+
+
+/* FRIEND REQUEST WINDOW */
+
+async function showRequests(){
+
+await loadUser();
+
+let html = `
+
+<h2>
+🔔 Friend Requests
+</h2>
+
+`;
+
+if(me.requests.length === 0){
+
+html += `
+
+<p>
+You don't have any friend requests.
+</p>
+
+`;
+
+}
+
+else{
+
+me.requests.forEach(request => {
+
+html += `
+
+<div class="request">
+
+<div class="avatar">
+
+${initials(request.username)}
+
+</div>
+
+<b style="flex:1">
+
+@${request.username}
+
+</b>
+
+<button
+class="btn primary"
+onclick="acceptRequest('${request.uid}')"
+>
+✓ Accept
+</button>
+
+<button
+class="btn"
+onclick="declineRequest('${request.uid}')"
+>
+✕
+</button>
+
+</div>
+
+`;
+
+});
+
+}
+
+html += `
+
+<button
+class="btn"
+onclick="closeModal()"
+style="margin-top:10px"
+>
+Done
+</button>
+
+`;
+
+openModal(html);
+
+}
+
+
+/* ACCEPT */
+
+async function acceptRequest(uid){
+
+try{
+
+await api(
+"/friends/accept",
+{
+method:"POST",
+body:JSON.stringify({
+uid:uid
+})
+}
+);
+
+closeModal();
+
+await loadUser();
+
+}
+
+catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* DECLINE */
+
+async function declineRequest(uid){
+
+try{
+
+await api(
+"/friends/decline",
+{
+method:"POST",
+body:JSON.stringify({
+uid:uid
+})
+}
+);
+
+showRequests();
+
+}
+
+catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* ADD FRIEND */
+
+function addFriend(){
+
+openModal(`
+
+<h2>
+👥 Add Friend
+</h2>
+
+<input
+id="friendUsername"
+class="input"
+placeholder="Friend's username"
+/>
+
+<div class="row">
+
+<button
+class="btn"
+onclick="closeModal()"
+>
+Cancel
+</button>
+
+<button
+class="btn primary"
+onclick="sendFriendRequest()"
+>
+Send Request
+</button>
+
+</div>
+
+`);
+
+}
+
+
+async function sendFriendRequest(){
+
+try{
+
+await api(
+"/friends/request",
+{
+method:"POST",
+body:JSON.stringify({
+
+username:
+$("friendUsername").value
+
+})
+}
+);
+
+closeModal();
+
+alert(
+"Friend request sent!"
+);
+
+}
+
+catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* SELECT FRIEND */
+
+async function selectFriend(friend){
+
+activeFriend =
+friend;
+
+$("friendName").textContent =
+"@" + friend.username;
+
+$("friendAvatar").textContent =
+initials(friend.username);
+
+$("friendStatus").textContent =
+friend.online
+? "● Online"
+: "○ Offline";
+
+$("messageInput").disabled =
+false;
+
+renderFriends();
+
+loadMessages();
+
+}
+
+
+/* MESSAGES */
+
+async function loadMessages(){
+
+if(!activeFriend)
+return;
+
+try{
+
+const messages =
+await api(
+"/messages/" +
+activeFriend.uid
+);
+
+const container =
+$("messages");
+
+container.innerHTML = "";
+
+if(messages.length === 0){
+
+container.innerHTML = `
+
+<div class="empty">
+
+No messages yet.<br>
+Say hello! 👋
+
+</div>
+
+`;
+
+return;
+
+}
+
+messages.forEach(message => {
+
+const bubble =
+document.createElement("div");
+
+bubble.className =
+"message";
+
+if(
+message.from === me.uid
+){
+
+bubble.classList.add("mine");
+
+}
+
+bubble.textContent =
+message.text;
+
+container.appendChild(
+bubble
+);
+
+});
+
+container.scrollTop =
+container.scrollHeight;
+
+}
+
+catch(error){
+
+console.log(error);
+
+}
+
+}
+
+
+/* SEND MESSAGE */
+
+async function sendMessage(){
+
+if(!activeFriend)
+return;
+
+const input =
+$("messageInput");
+
+const text =
+input.value.trim();
+
+if(!text)
+return;
+
+try{
+
+await api(
+"/messages/" +
+activeFriend.uid,
+{
+method:"POST",
+body:JSON.stringify({
+text:text
+})
+}
+);
+
+input.value = "";
+
+loadMessages();
+
+}
+
+catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+$("messageInput")
+.addEventListener(
+"keydown",
+event => {
+
+if(event.key === "Enter"){
+
+event.preventDefault();
+
+sendMessage();
+
+}
+
+});
+
+
+/* REAL TIME */
+
+function connectSocket(){
+
+try{
+
+if(socket)
+socket.close();
+
+}
+catch{}
+
+const protocol =
+location.protocol === "https:"
+? "wss"
+: "ws";
+
+socket =
+new WebSocket(
+protocol +
+"://" +
+location.host +
+"/ws"
+);
+
+socket.onopen = () => {
+
+socket.send(
+JSON.stringify({
+type:"auth",
+token:token
+})
+);
+
+};
+
+socket.onmessage =
+event => {
+
+const message =
+JSON.parse(event.data);
+
+if(
+message.type ===
+"friend_request"
+){
+
+loadUser();
+
+}
+
+if(
+message.type ===
+"friend_accepted"
+){
+
+loadUser();
+
+}
+
+if(
+message.type ===
+"message"
+){
+
+if(activeFriend){
+
+loadMessages();
+
+}
+
+}
+
+};
+
+socket.onclose = () => {
+
+setTimeout(
+() => {
+
+if(token)
+connectSocket();
+
+},
+2000
+);
+
+};
+
+}
+
+
+/* LOG OUT */
+
+function logout(){
+
+localStorage.removeItem(
+"felix_token"
+);
+
+location.reload();
+
+}
+
+
+/* START */
+
+if(token){
+
+loadUser();
+
+}
+else{
+
+loginScreen();
+
+}
+
+</script>
+
+</body>
+
+</html>
