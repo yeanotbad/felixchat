@@ -50,6 +50,3 @@ Turso stores the database records, not large uploaded video/image files in this 
 
 ## Security note
 For a public production deployment, replace the simple SHA-256 password hashing with a password KDF such as scrypt/Argon2, add rate limiting, CSRF/origin protections, secure cookie sessions, upload MIME/content validation, and moderation/reporting tools.
-
-## Mobile UI
-The interface is responsive and uses the full phone screen on mobile devices. Desktop remains the normal chat layout; no phone-frame effect is used.
