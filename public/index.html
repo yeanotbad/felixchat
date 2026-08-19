@@ -654,6 +654,272 @@ max-width:90%;
   }
 }
 
+
+/* Felix Chat clean UI polish */
+:root{
+  --bg:#080b16;
+  --panel:#0e1422;
+  --panel2:#131b2d;
+  --panel3:#18223a;
+  --border:#25324b;
+  --text:#f5f7ff;
+  --muted:#8e9bb4;
+  --accent:#6f59ff;
+  --accent2:#3188ff;
+}
+
+body{
+  background:radial-gradient(circle at 50% -10%,#141d36 0,#080b16 48%);
+  color:var(--text);
+  letter-spacing:.05px;
+}
+
+.sidebar{
+  background:rgba(12,17,30,.96);
+  border-right:1px solid rgba(70,88,125,.35);
+  padding:14px;
+  gap:8px;
+}
+
+.logo{
+  font-size:22px;
+  letter-spacing:-.4px;
+  padding:2px 3px 5px;
+}
+
+.profile{
+  background:rgba(21,29,48,.82);
+  border:1px solid rgba(66,82,115,.35);
+  padding:8px;
+  border-radius:13px;
+}
+
+.avatar{
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+}
+
+.btn{
+  min-height:40px;
+  padding:9px 11px;
+  border-radius:10px;
+  background:rgba(21,30,51,.82);
+  border:1px solid rgba(66,82,115,.55);
+  font-size:13px;
+  transition:transform .12s ease,background .12s ease,border-color .12s ease,box-shadow .12s ease;
+}
+
+.btn:hover{
+  background:#1a2741;
+  border-color:#3a4b70;
+  transform:translateY(-1px);
+}
+
+.btn:active{
+  transform:translateY(0);
+}
+
+.primary{
+  background:linear-gradient(135deg,#715aff,#3488ff);
+  border-color:transparent;
+  box-shadow:0 5px 16px rgba(75,91,255,.18);
+}
+
+.primary:hover{
+  background:linear-gradient(135deg,#7b65ff,#3c91ff);
+}
+
+.friend{
+  padding:8px 9px;
+  border-radius:11px;
+  min-height:54px;
+}
+
+.friend:hover,.friend.active{
+  background:#18243d;
+}
+
+.chat{
+  background:#090e19;
+}
+
+.chat-header{
+  height:64px;
+  padding:8px 15px;
+  background:rgba(9,14,25,.82);
+  border-bottom:1px solid rgba(70,88,125,.35);
+  backdrop-filter:blur(10px);
+}
+
+.messages{
+  padding:15px;
+  gap:8px;
+}
+
+.message{
+  max-width:72%;
+  padding:9px 12px;
+  border-radius:15px;
+  background:#151e31;
+  border:1px solid rgba(66,82,115,.25);
+  box-shadow:0 2px 8px rgba(0,0,0,.08);
+}
+
+.message.mine{
+  background:linear-gradient(135deg,#6652e9,#327ce4);
+  border-color:transparent;
+}
+
+.composer{
+  padding:8px;
+  background:rgba(10,15,26,.95);
+  border-top:1px solid rgba(70,88,125,.35);
+}
+
+.message-input{
+  padding:10px 12px;
+  border-radius:11px;
+  background:#11192a;
+  border-color:#293752;
+  min-height:40px;
+}
+
+.send{
+  min-height:40px;
+  padding:0 14px;
+  border-radius:11px;
+}
+
+.icon-btn{
+  min-height:40px;
+  height:40px;
+  padding:0 10px;
+  border-radius:10px;
+}
+
+.snap-toolbar{
+  gap:6px!important;
+}
+
+.snap-toolbar .btn{
+  padding:8px 7px!important;
+}
+
+.input{
+  padding:10px 11px;
+  border-radius:10px;
+}
+
+.snap-search{
+  gap:5px;
+}
+
+.story-strip{
+  padding:8px 14px;
+  background:rgba(9,14,25,.65);
+}
+
+.story-ring{
+  width:54px;
+  height:54px;
+}
+
+.modal{
+  background:rgba(0,0,0,.68);
+  backdrop-filter:blur(4px);
+}
+
+.modal-box{
+  background:#101829;
+  border:1px solid #2a3955;
+  border-radius:17px;
+  padding:18px;
+  box-shadow:0 18px 55px rgba(0,0,0,.42);
+}
+
+.request{
+  padding:9px;
+  border-radius:11px;
+  background:#151e31;
+  border:1px solid rgba(66,82,115,.25);
+}
+
+.badge,.notification-badge{
+  font-weight:700;
+}
+
+.small{
+  font-size:11px;
+}
+
+@media(max-width:700px){
+  .sidebar{
+    padding:10px 10px max(72px,env(safe-area-inset-bottom));
+    gap:7px;
+  }
+
+  .logo{font-size:20px}
+
+  .sidebar .btn{
+    min-height:40px;
+    padding:8px 9px;
+    font-size:13px;
+  }
+
+  .profile{min-height:52px}
+
+  .friend{
+    min-height:52px;
+    padding:7px 8px;
+  }
+
+  .chat-header{
+    height:60px;
+    min-height:60px;
+    padding:7px 9px 7px 55px;
+  }
+
+  .messages{
+    padding:10px 8px;
+    gap:7px;
+  }
+
+  .message{
+    max-width:90%;
+    padding:8px 10px;
+  }
+
+  .composer{
+    padding:6px 6px max(6px,env(safe-area-inset-bottom));
+  }
+
+  .message-input,.send{
+    height:40px;
+    min-height:40px;
+  }
+
+  .icon-btn{
+    height:38px;
+    min-height:38px;
+    flex-basis:40px;
+    width:40px;
+  }
+
+  .snap-toolbar .btn{
+    min-height:40px!important;
+  }
+
+  .modal{
+    padding:8px;
+  }
+
+  .modal-box{
+    padding:15px;
+    border-radius:16px;
+  }
+}
+
 </style>
 </head>
 
