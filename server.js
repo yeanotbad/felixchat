@@ -228,7 +228,7 @@ app.post('/api/admin/command',auth,async(req,res)=>{
   if(!target)return res.status(404).json({error:'User not found'});
   if(target.username==='felixchat')return res.status(400).json({error:'You cannot moderate the admin account.'});
   if(command==='ban'){
-    await db.batch([{sql:'UPDATE users SET banned=1,banned_at=?,banned_by=? WHERE uid=?',args:[now(),req.uid,req.uid]},{sql:'DELETE FROM sessions WHERE uid=?',args:[target.uid]}]);
+    await db.batch([{sql:'UPDATE users SET banned=1,banned_at=?,banned_by=? WHERE uid=?',args:[now(),req.uid,target.uid]},{sql:'DELETE FROM sessions WHERE uid=?',args:[target.uid]}]);
     broadcast(target.uid,{type:'banned'});
     return res.json({ok:true,action:'ban',username:target.username});
   }
