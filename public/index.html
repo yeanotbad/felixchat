@@ -313,11 +313,75 @@ max-width:90%;
 
 }
 
-.video-message{position:relative}.video-message-wrap{position:relative;display:inline-block}.video-save-menu{position:absolute;left:8px;bottom:8px;z-index:20;background:#10182aee;border:1px solid #30405f;border-radius:12px;padding:6px;box-shadow:0 10px 30px #0008}.video-save-menu button{border:0;background:#1b2742;color:#fff;padding:10px 12px;border-radius:9px;font-weight:700;cursor:pointer;white-space:nowrap}.video-save-menu button:hover{background:#26385d}.notification-bell{position:relative}.notification-badge{position:absolute;right:6px;top:5px;background:#ff496c;color:#fff;border-radius:20px;padding:2px 6px;font-size:10px;display:none}.toast-notification{position:fixed;right:18px;top:18px;z-index:10000;background:#10182a;border:1px solid #30405f;border-radius:14px;padding:12px 15px;box-shadow:0 12px 35px #0008;cursor:pointer;max-width:320px}.toast-notification b{display:block;margin-bottom:3px}.notification-list{max-height:55vh;overflow:auto}.notification-item{padding:12px;border-radius:12px;background:#151e32;margin:8px 0;cursor:pointer}</style>
+.video-message{position:relative}.video-message-wrap{position:relative;display:inline-block}.video-save-menu{position:absolute;left:8px;bottom:8px;z-index:20;background:#10182aee;border:1px solid #30405f;border-radius:12px;padding:6px;box-shadow:0 10px 30px #0008}.video-save-menu button{border:0;background:#1b2742;color:#fff;padding:10px 12px;border-radius:9px;font-weight:700;cursor:pointer;white-space:nowrap}.video-save-menu button:hover{background:#26385d}.notification-bell{position:relative}.notification-badge{position:absolute;right:6px;top:5px;background:#ff496c;color:#fff;border-radius:20px;padding:2px 6px;font-size:10px;display:none}.toast-notification{position:fixed;right:18px;top:18px;z-index:10000;background:#10182a;border:1px solid #30405f;border-radius:14px;padding:12px 15px;box-shadow:0 12px 35px #0008;cursor:pointer;max-width:320px}.toast-notification b{display:block;margin-bottom:3px}.notification-list{max-height:55vh;overflow:auto}.notification-item{padding:12px;border-radius:12px;background:#151e32;margin:8px 0;cursor:pointer}
+/* Mobile-first chat navigation: desktop layout remains unchanged. */
+.mobile-back{display:none}
+@media(max-width:700px){
+  html,body{width:100%;height:100%;overflow:hidden}
+  .app{height:100dvh;width:100%;display:block;position:relative}
+  .sidebar{width:100%;height:100dvh;border:0;padding:12px 12px 86px;overflow:auto}
+  .chat{display:none;height:100dvh;width:100%;min-width:0}
+  body.mobile-chat-open .sidebar{display:none}
+  body.mobile-chat-open .chat{display:flex}
+  body.mobile-chat-open .mobile-back{display:block;position:absolute;left:10px;top:14px;z-index:20;width:42px;height:42px;border-radius:14px;background:#151e33;border:1px solid #2c3854;color:#fff;font-size:30px;line-height:30px}
+  body.mobile-chat-open .chat-header{padding-left:62px;height:68px;flex-shrink:0}
+  .chat-header .profile{background:transparent;padding:0}
+  .story-strip{padding:10px 12px;flex-shrink:0}
+  .messages{padding:12px;gap:8px;min-height:0}
+  .composer{padding:8px;gap:6px;flex-wrap:nowrap;flex-shrink:0;padding-bottom:max(8px,env(safe-area-inset-bottom))}
+  .composer-extra{gap:4px}
+  .icon-btn{padding:0 9px;min-width:42px;height:42px}
+  .message-input{min-width:0;height:42px;font-size:16px}
+  .send{height:42px;padding:0 13px}
+  .snap-toolbar{grid-template-columns:1fr 1fr;gap:8px}
+  .snap-toolbar .btn,.sidebar>.btn{min-height:44px}
+  .profile{min-height:54px}
+  .friend{min-height:58px;padding:9px 10px}
+  .friends{max-height:none;overflow:auto}
+  .notification-bell{min-height:46px}
+  .modal-box{max-height:90dvh;overflow:auto;border-radius:20px;padding:18px}
+  .row{flex-wrap:wrap}
+  .row>*{min-width:120px}
+  .message{max-width:88%;font-size:15px}
+  .message-media,.message-video{max-width:78vw;max-height:45vh}
+}
+</style>
 
 
 <style>
 .snap-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:4px}.snap-toolbar .btn{padding:9px;font-size:12px}.story-strip{display:flex;gap:10px;overflow:auto;padding:10px 18px;border-bottom:1px solid #293650}.story-card{min-width:72px;text-align:center;cursor:pointer}.story-ring{width:58px;height:58px;margin:auto;border-radius:50%;padding:2px;background:linear-gradient(135deg,#ffdd55,#ff4f9a,#7257ff)}.story-ring img{width:100%;height:100%;object-fit:cover;border-radius:50%;border:3px solid #10182a}.story-add{display:flex;align-items:center;justify-content:center;background:#1b2742;font-size:25px}.typing{font-size:12px;color:#8f9db7;padding:0 18px 5px;min-height:17px}.reaction-row{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}.reaction-chip{border:1px solid #34415d;background:#11192c;color:#fff;border-radius:10px;padding:2px 6px;font-size:11px}.message-actions{display:flex;gap:5px;margin-top:5px}.message-actions button{background:#11192c;color:#cbd5ea;border:1px solid #34415d;border-radius:8px;padding:3px 7px;font-size:11px}.snap-toggle{display:flex;align-items:center;gap:7px;color:#aab6cf;font-size:12px;margin-top:8px}.snap-search{display:flex;gap:6px;margin-top:5px}.snap-search input{min-width:0}.story-viewer{position:fixed;inset:0;background:#05070dcc;z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}.story-viewer-box{max-width:520px;width:100%;height:min(85vh,820px);background:#10182a;border-radius:22px;overflow:hidden;position:relative}.story-viewer-box img,.story-viewer-box video{width:100%;height:100%;object-fit:contain;background:#000}.story-caption{position:absolute;left:0;right:0;bottom:0;padding:28px 18px 18px;background:linear-gradient(transparent,#000b);font-weight:700}.story-close{position:absolute;right:12px;top:12px;z-index:2;border:0;background:#0009;color:#fff;border-radius:50%;width:38px;height:38px;font-size:20px}
+
+/* Mobile-first chat navigation: desktop layout remains unchanged. */
+.mobile-back{display:none}
+@media(max-width:700px){
+  html,body{width:100%;height:100%;overflow:hidden}
+  .app{height:100dvh;width:100%;display:block;position:relative}
+  .sidebar{width:100%;height:100dvh;border:0;padding:12px 12px 86px;overflow:auto}
+  .chat{display:none;height:100dvh;width:100%;min-width:0}
+  body.mobile-chat-open .sidebar{display:none}
+  body.mobile-chat-open .chat{display:flex}
+  body.mobile-chat-open .mobile-back{display:block;position:absolute;left:10px;top:14px;z-index:20;width:42px;height:42px;border-radius:14px;background:#151e33;border:1px solid #2c3854;color:#fff;font-size:30px;line-height:30px}
+  body.mobile-chat-open .chat-header{padding-left:62px;height:68px;flex-shrink:0}
+  .chat-header .profile{background:transparent;padding:0}
+  .story-strip{padding:10px 12px;flex-shrink:0}
+  .messages{padding:12px;gap:8px;min-height:0}
+  .composer{padding:8px;gap:6px;flex-wrap:nowrap;flex-shrink:0;padding-bottom:max(8px,env(safe-area-inset-bottom))}
+  .composer-extra{gap:4px}
+  .icon-btn{padding:0 9px;min-width:42px;height:42px}
+  .message-input{min-width:0;height:42px;font-size:16px}
+  .send{height:42px;padding:0 13px}
+  .snap-toolbar{grid-template-columns:1fr 1fr;gap:8px}
+  .snap-toolbar .btn,.sidebar>.btn{min-height:44px}
+  .profile{min-height:54px}
+  .friend{min-height:58px;padding:9px 10px}
+  .friends{max-height:none;overflow:auto}
+  .notification-bell{min-height:46px}
+  .modal-box{max-height:90dvh;overflow:auto;border-radius:20px;padding:18px}
+  .row{flex-wrap:wrap}
+  .row>*{min-width:120px}
+  .message{max-width:88%;font-size:15px}
+  .message-media,.message-video{max-width:78vw;max-height:45vh}
+}
 </style>
 </head>
 
@@ -412,6 +476,7 @@ Log Out
 <main class="chat">
 
 <header class="chat-header">
+<button id="mobileBack" class="mobile-back" onclick="mobileShowChats()" aria-label="Back to chats">‹</button>
 
 <div class="profile">
 
@@ -1454,26 +1519,22 @@ function syncAdminButton(){
   btn.disabled=!isAdmin;
 }
 async function openAdminPanel(){
-  if(!me || String(me.username||'').toLowerCase()!=='felixchat'){
-    alert('Admin access required'); return;
-  }
+  if(!me || String(me.username||'').toLowerCase()!=='felixchat'){ alert('Admin access required'); return; }
   try{
     const status=await api('/admin/status');
     if(!status.admin){syncAdminButton();return alert('Admin access required');}
+    openModal(`<h2>🛡️ FelixChat Admin</h2><p class="small">Ban or unban accounts. Only @felixchat can use this.</p><div class="row"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" style="margin-top:12px">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:10px">Done</button>`);
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
 }
 async function refreshAdminUsers(){
+  const box=$('adminUserResults'); if(!box)return;
   try{
-    const q=prompt('Search username (leave blank for all users):','')??'';
+    const q=($('adminUserSearch')?.value||'').trim();
     const users=await api('/admin/users?q='+encodeURIComponent(q));
-    let html='<h2>🛡️ FelixChat Admin</h2><p class="small">Only @felixchat can use this panel.</p>';
-    users.forEach(u=>{
-      html+=`<div class="request"><div class="avatar">${initials(u.username)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)}</div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${u.username==='felixchat'?'':u.banned?`<button class="btn primary" onclick="adminUnban('${u.uid}')">Unban</button>`:`<button class="btn" onclick="adminBan('${u.uid}','${escapeHtml(u.username)}')">Ban</button>`}</div>`;
-    });
-    html+='<button class="btn" onclick="closeModal()">Done</button>';
-    openModal(html);
-  }catch(e){alert(e.message)}
+    if(!users.length){box.innerHTML='<p class="small">No users found.</p>';return;}
+    box.innerHTML=users.map(u=>`<div class="request"><div class="avatar">${initials(u.username)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)}</div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${u.username==='felixchat'?'':u.banned?`<button class="btn primary" onclick="adminUnban('${u.uid}')">Unban</button>`:`<button class="btn" onclick="adminBan('${u.uid}','${escapeHtml(u.username)}')">Ban</button>`}</div>`).join('');
+  }catch(e){box.innerHTML='<p class="small">'+escapeHtml(e.message)+'</p>';}
 }
 async function adminBan(uid,username){
   if(!confirm('Ban @'+username+'? They will be logged out immediately.'))return;
@@ -1516,7 +1577,12 @@ const originalConnectSocket=connectSocket;
 connectSocket=function(){originalConnectSocket();setTimeout(()=>{if(socket){const old=socket.onmessage;socket.onmessage=(event)=>{try{const m=JSON.parse(event.data);if(m.type==='typing'&&activeFriend&&m.uid===activeFriend.uid){$('typingIndicator').textContent=m.typing?'typing...':''}if(m.type==='message'&&m.message)notifyNewMessage(m.message);if(m.type==='message_read'){const el=$('messages').querySelector('[data-message-id="'+CSS.escape(m.messageId)+'"]');if(el)el.title='Seen'}if(m.type==='message_edited'){const el=$('messages').querySelector('[data-message-id="'+CSS.escape(m.message.id)+'"]');if(el){el.replaceWith(messageBubble(m.message))}}if(m.type==='reaction'){}if(m.type==='story_added')showStories().catch(()=>{});if(m.type==='banned'){alert('Your account has been banned.');localStorage.removeItem('felix_token');location.reload()}}catch(e){} if(old)old(event)}}},50)};
 
 const originalSelectFriend=selectFriend;
-selectFriend=async function(friend){await originalSelectFriend(friend);$('typingIndicator').textContent='';setTimeout(()=>{document.querySelectorAll('#messages .message').forEach(el=>{const id=el.dataset.messageId;if(id)api('/messages/'+friend.uid+'/'+id+'/read',{method:'POST'}).catch(()=>{})})},250)};
+selectFriend=async function(friend){await originalSelectFriend(friend);mobileShowChat();$('typingIndicator').textContent='';setTimeout(()=>{document.querySelectorAll('#messages .message').forEach(el=>{const id=el.dataset.messageId;if(id)api('/messages/'+friend.uid+'/'+id+'/read',{method:'POST'}).catch(()=>{})})},250)};
+
+function mobileShowChat(){if(window.innerWidth<=700){document.body.classList.add('mobile-chat-open');}}
+function mobileShowChats(){if(window.innerWidth<=700){document.body.classList.remove('mobile-chat-open');activeFriend=null;$('messageInput').disabled=true;}}
+const _mobileSelectFriend=selectFriend;
+selectFriend=async function(friend){await _mobileSelectFriend(friend);mobileShowChat();};
 
 // Load stories after authentication.
 const originalLoadUser=loadUser;
