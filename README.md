@@ -1,29 +1,22 @@
-# Felix Chat — real server version
+# Felix Chat — upgraded realtime version
 
-This is the version to use when you want a real multi-device chat.
+This version keeps the existing Felix Chat design and adds faster realtime messaging plus media features.
 
-## Run it
+## Run
+npm install
+npm start
 
-1. Install Node.js.
-2. Open a terminal in this folder.
-3. Run:
+## Features added
+- Instant WebSocket message delivery without reloading the whole conversation.
+- Instant local message rendering after send.
+- Multiple tabs/devices can stay connected to the same account.
+- Message deletion with realtime deletion on both sides.
+- Image sending.
+- Video sending.
+- Voice recording and voice-message sending.
+- Media uploads up to 50 MB.
+- Automatic WebSocket reconnect.
 
-   npm install
-   npm start
+For Render, deploy the project as a Node service using `npm start`. The frontend is served from `public/index.html`.
 
-4. Open `http://localhost:3000`.
-
-For other people to use it over the internet, deploy this folder to a Node-capable host and use the HTTPS URL.
-
-## What it does
-
-- Accounts with username/password
-- Friend requests
-- Accepting friends can be added through the API
-- Server-side saved messages
-- Online WebSocket status
-- Messages survive refreshes and different devices
-- No Firebase
-- Neocities can host the frontend, but the backend must run somewhere that supports Node/WebSockets.
-
-For production, add HTTPS, a real database, rate limiting, password hashing with Argon2/bcrypt, CSRF/origin protections, and a proper authentication/session system.
+Note: uploaded media is stored on the server filesystem. On hosts where the filesystem is ephemeral, use persistent storage or object storage for production media.
