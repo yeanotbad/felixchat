@@ -217,6 +217,30 @@ app.post('/api/admin/unban/:uid',auth,async(req,res)=>{
   await db.execute({sql:'UPDATE users SET banned=0,banned_at=NULL,banned_by=NULL WHERE uid=?',args:[req.params.uid]});res.json({ok:true});
 });
 
+app.post('/api/admin/command',auth,async(req,res)=>{
+  if(!await requireAdmin(req,res))return;
+  const command=String(req.body.command||'').trim().toLowerCase();
+  const username=clean(req.body.username||'').toLowerCase();
+  if(!['ban','unban'].includes(command))return res.status(400).json({error:'Use /ban username or /unban username'});
+  if(!username)return res.status(400).json({error:'Enter a username'});
+  const r=await db.execute({sql:'SELECT uid,username FROM users WHERE username=?',args:[username]});
+  const target=r.rows[0];
+  if(!target)return res.status(404).json({error:'User not found'});
+  if(target.username==='felixchat')return res.status(400).json({error:'You cannot moderate the admin account.'});
+  if(command==='ban'){
+    await db.batch([{sql:'UPDATE users SET banned=1,banned_at=?,banned_by=? WHERE uid=?',args:[now(),req.uid,target.uid]},{sql:'DELETE FROM sessions WHERE uid=?',args:[target.uid]}]);
+    broadcast(target.uid,{type:'banned'});
+    return res.json({ok:true,action:'ban',username:target.username});
+  }
+  await db.execute({sql:'UPDATE users SET banned=0,banned_at=NULL,banned_by=NULL WHERE uid=?',args:[target.uid]});
+  res.json({ok:true,action:'unban',username:target.username});
+});
+
+app.get('/api/notifications/unread',auth,async(req,res)=>{
+  const r=await db.execute({sql:`SELECT m.id,m.sender_id,m.text,m.kind,m.created_at,u.username,u.display_name FROM messages m JOIN users u ON u.uid=m.sender_id WHERE m.receiver_id=? AND m.read_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) ORDER BY m.created_at DESC LIMIT 50`,args:[req.uid,now()]});
+  res.json(r.rows.map(m=>({id:m.id,uid:m.sender_id,username:m.username,displayName:m.display_name||m.username,text:m.text||'',kind:m.kind,time:m.created_at})));
+});
+
 // Simple group-chat backend.
 app.post('/api/groups',auth,async(req,res)=>{const name=String(req.body.name||'New Group').trim().slice(0,40);const gid=id();await db.batch([{sql:'INSERT INTO groups(gid,name,owner_id,created_at) VALUES(?,?,?,?)',args:[gid,name,req.uid,now()]},{sql:'INSERT INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[gid,req.uid,now()]}]);res.json({gid,name});});
 app.get('/api/groups',auth,async(req,res)=>{const r=await db.execute({sql:`SELECT g.* FROM groups g JOIN group_members m ON m.gid=g.gid WHERE m.uid=? ORDER BY g.created_at DESC`,args:[req.uid]});res.json(r.rows);});
