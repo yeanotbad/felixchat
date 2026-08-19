@@ -138,6 +138,20 @@ app.patch('/api/profile',auth,async(req,res)=>{
   await db.execute({sql:'UPDATE users SET display_name=?, bio=?, avatar=? WHERE uid=?',args:[display||null,bio,avatar,req.uid]});
   res.json({ok:true});
 });
+app.post('/api/profile/avatar',auth,profileUpload.single('file'),async(req,res)=>{
+  if(!req.file) return res.status(400).json({error:'Please choose an image.'});
+  const mime=String(req.file.mimetype||'');
+  if(!mime.startsWith('image/')){
+    fs.unlink(req.file.path,()=>{});
+    return res.status(400).json({error:'Profile pictures must be images.'});
+  }
+  const u=await getUser(req.uid);
+  const avatar='/uploads/'+path.basename(req.file.path);
+  await db.execute({sql:'UPDATE users SET avatar=? WHERE uid=?',args:[avatar,req.uid]});
+  if(u?.avatar?.startsWith('/uploads/')) fs.unlink(path.join(UPLOADS,path.basename(u.avatar)),()=>{});
+  res.json({ok:true,avatar});
+});
+
 
 app.get('/api/users/search',auth,async(req,res)=>{const q=clean(req.query.q).toLowerCase(); if(!q) return res.json([]); const r=await db.execute({sql:`SELECT * FROM users WHERE username LIKE ? OR display_name LIKE ? LIMIT 20`,args:[`%${q}%`,`%${q}%`]});res.json(r.rows.filter(x=>x.uid!==req.uid).map(x=>publicUser(x,(sockets.get(x.uid)?.size||0)>0)));});
 
@@ -172,6 +186,15 @@ app.post('/api/messages/:uid/:messageId/react',auth,async(req,res)=>{const emoji
 app.delete('/api/messages/:uid/:messageId',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM messages WHERE id=? AND sender_id=?',args:[req.params.messageId,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'DELETE FROM messages WHERE id=?',args:[req.params.messageId]});pair(req.uid,r.rows[0].receiver_id,{type:'message_deleted',messageId:req.params.messageId});if(r.rows[0].url?.startsWith('/uploads/'))fs.unlink(path.join(UPLOADS,path.basename(r.rows[0].url)),()=>{});res.json({ok:true});});
 
 const upload=multer({storage:multer.diskStorage({destination:(_r,_f,cb)=>cb(null,UPLOADS),filename:(_r,file,cb)=>cb(null,id()+path.extname(file.originalname||'').toLowerCase().slice(0,10))}),limits:{fileSize:50*1024*1024}});
+const profileUpload=multer({
+  storage:multer.diskStorage({
+    destination:(_r,_f,cb)=>cb(null,UPLOADS),
+    filename:(_r,file,cb)=>cb(null,'avatar-'+id()+path.extname(file.originalname||'').toLowerCase().slice(0,10))
+  }),
+  limits:{fileSize:5*1024*1024},
+  fileFilter:(_req,file,cb)=>cb(null,!!String(file.mimetype||'').startsWith('image/'))
+});
+
 app.post('/api/upload/:uid',auth,upload.single('file'),async(req,res)=>{const other=req.params.uid;if(!await areFriends(req.uid,other)){if(req.file)fs.unlink(req.file.path,()=>{});return res.status(403).json({error:'Not friends'});}if(!req.file)return res.status(400).json({error:'No file'});const mime=req.file.mimetype||'application/octet-stream';const kind=mime.startsWith('image/')?'image':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'voice':'file';const m={id:id(),from:req.uid,to:other,text:'',kind,url:'/uploads/'+path.basename(req.file.path),name:String(req.file.originalname||'file').slice(0,120),mime,time:now(),readAt:null,expiresAt:null,replyTo:null,edited:false};await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,url,name,mime,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,'',kind,m.url,m.name,mime,m.time]});broadcast(other,{type:'message',message:m});res.json(m);});
 
 app.post('/api/typing/:uid',auth,async(req,res)=>{broadcast(req.params.uid,{type:'typing',uid:req.uid,typing:!!req.body.typing});res.json({ok:true});});
