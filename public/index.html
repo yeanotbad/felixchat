@@ -1223,6 +1223,32 @@ button,.btn,.icon-btn,.send,.friend,.story-card,.request,.notification-item{
   to{opacity:1;transform:translateY(0) scale(1)}
 }
 
+
+/* Admin / Moderator panels: wide, scrollable and always closable */
+.modal-box.admin-tools-box{
+  width:min(1100px,95vw);
+  max-width:1100px;
+  max-height:88dvh;
+  overflow:auto;
+  position:relative;
+  box-sizing:border-box;
+}
+.admin-tools-header{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-right:48px}
+.admin-tools-header h2{margin:0;flex:1}
+.admin-tools-exit{position:absolute;right:14px;top:14px;z-index:5;min-width:42px;height:42px;padding:0 13px;border-radius:12px;border:1px solid #3a4769;background:#202946;color:#fff;font-weight:900;cursor:pointer}
+.admin-tools-exit:hover{background:#2d3a5d}
+.admin-tools-search{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.admin-tools-search .input{flex:1;min-width:0}
+.admin-tools-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:58dvh;overflow:auto;padding-right:2px}
+.admin-tools-results .request{min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.admin-tools-results .request>b{min-width:150px}
+@media(max-width:760px){
+  .modal-box.admin-tools-box{width:96vw;max-height:90dvh;padding:14px}
+  .admin-tools-results{grid-template-columns:1fr}
+  .admin-tools-search{flex-direction:column;align-items:stretch}
+  .admin-tools-search button{width:100%}
+}
+
 /* Notification toast */
 .toast-notification{
   background:linear-gradient(135deg,#171c35,#11162a);
@@ -2406,14 +2432,16 @@ async function openAdminPanel(){
   try{
     const status=await api('/admin/status');
     if(!status.admin)return alert('Admin access required');
-    openModal(`<h2>🛡️ FelixChat Admin</h2><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="row"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" style="margin-top:12px">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:10px">Done</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:12px;width:100%">Exit Admin Panel</button>`);
+    $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
 }
 async function openModPanel(){
   if(!['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
   try{
-    openModal(`<h2>🛡️ Moderator Tools</h2><p class="small">Moderators can ban/unban accounts. Only @felixchat can grant powers.</p><div class="row"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" style="margin-top:12px">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:10px">Done</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ Moderator Tools</h2></div><p class="small">Moderators can ban/unban accounts. Only @felixchat can grant powers.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:12px;width:100%">Exit Mod Tools</button>`);
+    $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
 }
