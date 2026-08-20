@@ -133,10 +133,26 @@ app.get('/api/me',auth,async(req,res)=>{
   res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',streak:u.streak||0,friends:fr.rows.map(x=>publicUser(x,(sockets.get(x.uid)?.size||0)>0)),requests:incoming.rows.map(x=>publicUser(x))});
 });
 
+const upload=multer({storage:multer.diskStorage({destination:(_r,_f,cb)=>cb(null,UPLOADS),filename:(_r,file,cb)=>cb(null,id()+path.extname(file.originalname||'').toLowerCase().slice(0,10))}),limits:{fileSize:50*1024*1024}});
+
 app.patch('/api/profile',auth,async(req,res)=>{
   const display=clean(req.body.displayName||'').slice(0,30),bio=String(req.body.bio||'').slice(0,160),avatar=String(req.body.avatar||'').slice(0,500);
   await db.execute({sql:'UPDATE users SET display_name=?, bio=?, avatar=? WHERE uid=?',args:[display||null,bio,avatar,req.uid]});
   res.json({ok:true});
+});
+
+// Profile-picture uploads are stored on the Render server and the resulting URL is saved in Turso.
+app.post('/api/profile/avatar',auth,upload.single('file'),async(req,res)=>{
+  try{
+    if(!req.file)return res.status(400).json({error:'No image selected'});
+    const mime=req.file.mimetype||'';
+    if(!mime.startsWith('image/')){fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Profile picture must be an image'});}
+    const url='/uploads/'+path.basename(req.file.path);
+    const old=await getUser(req.uid);
+    await db.execute({sql:'UPDATE users SET avatar=? WHERE uid=?',args:[url,req.uid]});
+    if(old?.avatar?.startsWith('/uploads/'))fs.unlink(path.join(UPLOADS,path.basename(old.avatar)),()=>{});
+    res.json({ok:true,avatar:url});
+  }catch(e){if(req.file)fs.unlink(req.file.path,()=>{});res.status(500).json({error:'Profile picture upload failed'});}
 });
 
 app.get('/api/users/search',auth,async(req,res)=>{const q=clean(req.query.q).toLowerCase(); if(!q) return res.json([]); const r=await db.execute({sql:`SELECT * FROM users WHERE username LIKE ? OR display_name LIKE ? LIMIT 20`,args:[`%${q}%`,`%${q}%`]});res.json(r.rows.filter(x=>x.uid!==req.uid).map(x=>publicUser(x,(sockets.get(x.uid)?.size||0)>0)));});
@@ -171,7 +187,7 @@ app.post('/api/messages/:uid/:messageId/read',auth,async(req,res)=>{await db.exe
 app.post('/api/messages/:uid/:messageId/react',auth,async(req,res)=>{const emoji=String(req.body.emoji||'❤️').slice(0,8);await db.execute({sql:'INSERT INTO reactions(message_id,uid,emoji,created_at) VALUES(?,?,?,?) ON CONFLICT(message_id,uid) DO UPDATE SET emoji=excluded.emoji,created_at=excluded.created_at',args:[req.params.messageId,req.uid,emoji,now()]});const r=await db.execute({sql:'SELECT * FROM reactions WHERE message_id=?',args:[req.params.messageId]});const mr=await db.execute({sql:'SELECT sender_id,receiver_id FROM messages WHERE id=?',args:[req.params.messageId]});if(mr.rows[0])pair(mr.rows[0].sender_id,mr.rows[0].receiver_id,{type:'reaction',messageId:req.params.messageId,reactions:r.rows});res.json(r.rows);});
 app.delete('/api/messages/:uid/:messageId',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM messages WHERE id=? AND sender_id=?',args:[req.params.messageId,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'DELETE FROM messages WHERE id=?',args:[req.params.messageId]});pair(req.uid,r.rows[0].receiver_id,{type:'message_deleted',messageId:req.params.messageId});if(r.rows[0].url?.startsWith('/uploads/'))fs.unlink(path.join(UPLOADS,path.basename(r.rows[0].url)),()=>{});res.json({ok:true});});
 
-const upload=multer({storage:multer.diskStorage({destination:(_r,_f,cb)=>cb(null,UPLOADS),filename:(_r,file,cb)=>cb(null,id()+path.extname(file.originalname||'').toLowerCase().slice(0,10))}),limits:{fileSize:50*1024*1024}});
+
 app.post('/api/upload/:uid',auth,upload.single('file'),async(req,res)=>{const other=req.params.uid;if(!await areFriends(req.uid,other)){if(req.file)fs.unlink(req.file.path,()=>{});return res.status(403).json({error:'Not friends'});}if(!req.file)return res.status(400).json({error:'No file'});const mime=req.file.mimetype||'application/octet-stream';const kind=mime.startsWith('image/')?'image':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'voice':'file';const m={id:id(),from:req.uid,to:other,text:'',kind,url:'/uploads/'+path.basename(req.file.path),name:String(req.file.originalname||'file').slice(0,120),mime,time:now(),readAt:null,expiresAt:null,replyTo:null,edited:false};await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,url,name,mime,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,'',kind,m.url,m.name,mime,m.time]});broadcast(other,{type:'message',message:m});res.json(m);});
 
 app.post('/api/typing/:uid',auth,async(req,res)=>{broadcast(req.params.uid,{type:'typing',uid:req.uid,typing:!!req.body.typing});res.json({ok:true});});
@@ -246,7 +262,7 @@ app.post('/api/groups',auth,async(req,res)=>{const name=String(req.body.name||'N
 app.get('/api/groups',auth,async(req,res)=>{const r=await db.execute({sql:`SELECT g.* FROM groups g JOIN group_members m ON m.gid=g.gid WHERE m.uid=? ORDER BY g.created_at DESC`,args:[req.uid]});res.json(r.rows);});
 app.post('/api/groups/:gid/members',auth,async(req,res)=>{const other=req.body.uid;const member=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[req.params.gid,req.uid]});if(!member.rows.length)return res.status(403).json({error:'Not a group member'});await db.execute({sql:'INSERT OR IGNORE INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[req.params.gid,other,now()]});res.json({ok:true});});
 
-wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));}else if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});}catch{}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
+wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));}else if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});else if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to)broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}catch{}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
 
 setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
