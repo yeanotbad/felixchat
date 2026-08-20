@@ -145,38 +145,6 @@ app.post('/api/login', async (req,res)=>{
 
 app.post('/api/logout',auth,async(req,res)=>{const token=req.headers.authorization?.replace(/^Bearer\s+/i,'');await db.execute({sql:'DELETE FROM sessions WHERE token=?',args:[token]});res.json({ok:true});});
 
-// Developer / moderator fun commands. These are server-authorized so normal users cannot forge them.
-async function findUserByName(name){
-  const username=String(name||'').replace(/^@/,'').trim().toLowerCase();
-  if(!username) return null;
-  const r=await db.execute({sql:'SELECT uid,username,display_name,role FROM users WHERE username=?',args:[username]});
-  return r.rows[0]||null;
-}
-app.post('/api/dev/command',auth,async(req,res)=>{
-  const me=await getUser(req.uid);
-  if(!me || String(me.username).toLowerCase()!=='felixchat' || String(me.role).toLowerCase()!=='admin') return res.status(403).json({error:'Developer access required'});
-  const command=String(req.body.command||'').toLowerCase().replace(/^\//,'').trim();
-  const target=await findUserByName(req.body.target);
-  if(!target)return res.status(404).json({error:'User not found'});
-  const allowed=['rainbow','shake','confetti','spin','invert'];
-  if(!allowed.includes(command))return res.status(400).json({error:'Unknown developer command'});
-  broadcast(target.uid,{type:'dev_effect',effect:command,duration:command==='confetti'?4500:7000,from:'felixchat'});
-  res.json({ok:true,effect:command,target:target.username});
-});
-app.post('/api/mod/command',auth,async(req,res)=>{
-  const me=await getUser(req.uid);
-  if(!me || !['admin','mod'].includes(String(me.role).toLowerCase())) return res.status(403).json({error:'Moderator access required'});
-  const command=String(req.body.command||'').toLowerCase().replace(/^\//,'').trim();
-  const target=await findUserByName(req.body.target);
-  if(!target)return res.status(404).json({error:'User not found'});
-  if(target.username==='felixchat')return res.status(400).json({error:'You cannot target the developer.'});
-  const allowed=['shake','rainbow'];
-  if(!allowed.includes(command))return res.status(400).json({error:'Unknown moderator command'});
-  broadcast(target.uid,{type:'mod_effect',effect:command,duration:5000,from:me.username});
-  res.json({ok:true,effect:command,target:target.username});
-});
-
-
 app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
@@ -245,6 +213,30 @@ app.post('/api/block/:uid',auth,async(req,res)=>{await db.execute({sql:'INSERT O
 app.delete('/api/block/:uid',auth,async(req,res)=>{await db.execute({sql:'DELETE FROM blocks WHERE uid=? AND blocked_uid=?',args:[req.uid,req.params.uid]});res.json({ok:true});});
 
 function messageRow(x){return {id:x.id,from:x.sender_id,to:x.receiver_id,text:x.text||'',kind:x.kind,url:x.url||'',name:x.name||'',mime:x.mime||'',time:x.created_at,readAt:x.read_at,expiresAt:x.expires_at,replyTo:x.reply_to,edited:!!x.edited};}
+
+// Developer / moderator fun commands. These are visual-only effects and are
+// permission-checked server-side. No account/data changes are performed.
+app.post('/api/dev-command',auth,async(req,res)=>{
+  try{
+    const actor=await getUser(req.uid);
+    const role=String(actor?.role||'member').toLowerCase();
+    const command=String(req.body?.command||'').trim().toLowerCase();
+    const targetUid=String(req.body?.targetUid||'').trim();
+    if(!actor || !['admin','mod'].includes(role)) return res.status(403).json({error:'Developer or moderator access required'});
+    if(!targetUid || targetUid===req.uid) return res.status(400).json({error:'Choose another user'});
+    const target=await getUser(targetUid);
+    if(!target) return res.status(404).json({error:'User not found'});
+    if(target.username==='felixchat') return res.status(403).json({error:'The developer account cannot be targeted'});
+    const modCommands=new Set(['shake','rainbow']);
+    const devCommands=new Set(['shake','rainbow','spin','confetti','big','invert']);
+    if(role==='mod' && !modCommands.has(command)) return res.status(403).json({error:'That command is developer-only'});
+    if(role==='admin' && !devCommands.has(command)) return res.status(400).json({error:'Unknown developer command'});
+    const payload={type:'dev_effect',effect:command,from:actor.username,fromRole:role};
+    broadcast(target.uid,payload);
+    res.json({ok:true,effect:command,target:target.username});
+  }catch(e){console.error(e);res.status(500).json({error:'Command failed'});}
+});
+
 app.get('/api/messages/:uid',auth,async(req,res)=>{if(!await areFriends(req.uid,req.params.uid))return res.status(403).json({error:'Not friends'});const r=await db.execute({sql:`SELECT * FROM messages WHERE chat_key=? AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at`,args:[chatKey(req.uid,req.params.uid),now()]});const out=[];for(const row of r.rows){const m=messageRow(row);const rr=await db.execute({sql:'SELECT uid,emoji FROM reactions WHERE message_id=? ORDER BY created_at',args:[m.id]});m.reactions=rr.rows;out.push(m)}res.json(out);});
 app.post('/api/messages/:uid',auth,async(req,res)=>{
   const other=req.params.uid;if(!await areFriends(req.uid,other))return res.status(403).json({error:'Not friends'});if(await blocked(req.uid,other)||await blocked(other,req.uid))return res.status(403).json({error:'Messaging unavailable'});
