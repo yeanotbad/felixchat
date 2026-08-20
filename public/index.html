@@ -1304,6 +1304,23 @@ button:focus-visible,input:focus-visible{
 .call-overlay{position:fixed;inset:0;z-index:20000;background:rgba(5,7,16,.94);backdrop-filter:blur(18px);display:none;align-items:center;justify-content:center;padding:18px}.call-card{width:min(720px,100%);background:#11162a;border:1px solid #354264;border-radius:24px;padding:18px;box-shadow:0 25px 80px #000b;display:flex;flex-direction:column;gap:12px}.call-title{font-size:20px;font-weight:900}.call-sub{color:#9aa6c2;font-size:13px}.call-video-stage{position:relative;background:#05070d;border-radius:18px;overflow:hidden;min-height:260px;aspect-ratio:16/9}.call-video-stage video{width:100%;height:100%;object-fit:contain;background:#05070d}.call-video-stage #localVideo{position:absolute;right:12px;bottom:12px;width:26%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff4;border-radius:14px;display:none}.call-audio-icon{font-size:64px;text-align:center;padding:70px 0}.call-controls,.incoming-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.call-control{padding:11px 18px;border-radius:12px;background:#202946;color:#fff;border:1px solid #3a4769;font-weight:800}.call-control.end{background:#d83f5d;border-color:#d83f5d}.profile-upload{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed #3a4769;border-radius:12px;background:#0d1322}
 @media(max-width:700px){.call-btn{width:40px;min-width:40px;padding:0}.call-btn span{display:none}.chat-header .profile{min-width:0}.call-card{border-radius:18px;padding:12px}.call-video-stage{min-height:220px}.call-control{min-height:44px}}
 </style>
+
+<style>
+.developer-name{position:relative;font-weight:900;background:linear-gradient(90deg,#ff3b7f,#ffb52e,#55e878,#31b7ff,#9b5cff,#ff3b7f);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:devRainbow 3s linear infinite;text-shadow:0 0 10px #8b5cf644}
+.developer-name::after{content:"";position:absolute;inset:-4px -7px;border:2px solid transparent;border-radius:8px;background:linear-gradient(90deg,#ff3b7f,#ffb52e,#55e878,#31b7ff,#9b5cff,#ff3b7f) border-box;background-size:300% 100%;-webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:devRainbow 3s linear infinite;pointer-events:none}
+.dev-badge{display:inline-flex;align-items:center;justify-content:center;margin-left:5px;color:#fff;background:#2f80ff;border-radius:50%;width:15px;height:15px;font-size:10px;font-weight:900;box-shadow:0 0 8px #2f80ff88}
+.dev-label{margin-left:5px;color:#55b7ff;font-size:10px;font-weight:900;text-transform:uppercase}
+@keyframes devRainbow{to{background-position:300% 0}}
+.dev-shake{animation:devShake .5s linear 6!important}
+.dev-spin{animation:devSpin .8s ease-in-out 6!important}
+.dev-invert{filter:invert(1) hue-rotate(180deg)!important}
+@keyframes devShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px) rotate(-1deg)}75%{transform:translateX(8px) rotate(1deg)}}
+@keyframes devSpin{50%{transform:rotate(180deg) scale(1.03)}}
+.dev-confetti{position:fixed;inset:0;pointer-events:none;z-index:30000;overflow:hidden}
+.dev-confetti i{position:absolute;top:-20px;width:9px;height:16px;animation:fall 2.8s linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg);opacity:.1}}
+.command-help{display:grid;gap:6px;margin-top:10px}.command-help code{background:#11192c;border:1px solid #2f3c5b;border-radius:8px;padding:4px 7px}
+</style>
 </head>
 
 <body>
@@ -1742,8 +1759,7 @@ try{
 me =
 await api("/me");
 
-$("myName").textContent =
-"@" + me.username;
+$("myName").innerHTML = userLabel(me);
 
 setAvatar($("myAvatar"),me);
 
@@ -2087,6 +2103,46 @@ loadMessages();
 
 
 /* MESSAGES — render once, then apply realtime events directly */
+function displayUserForMessage(message){
+  if(message.from===me?.uid) return me;
+  if(activeFriend && message.from===activeFriend.uid) return activeFriend;
+  return {username:message.senderUsername||'',displayName:message.senderDisplayName||message.senderUsername||'',role:message.senderRole||'member'};
+}
+function decorateDeveloperSender(bubble,message){
+  const user=displayUserForMessage(message); const dev=String(user?.username||'').toLowerCase()==='felixchat';
+  if(!dev)return;
+  const head=document.createElement('div'); head.className='small'; head.style.marginBottom='4px';
+  head.innerHTML='<span class="developer-name">@felixchat</span><span class="dev-badge">✓</span><span class="dev-label">Developer</span>';
+  bubble.prepend(head);
+}
+
+function applyFunEffect(effect,duration){
+  const root=document.body;
+  if(effect==='shake'){root.classList.add('dev-shake');setTimeout(()=>root.classList.remove('dev-shake'),duration||5000);return;}
+  if(effect==='spin'){root.classList.add('dev-spin');setTimeout(()=>root.classList.remove('dev-spin'),duration||5000);return;}
+  if(effect==='invert'){root.classList.add('dev-invert');setTimeout(()=>root.classList.remove('dev-invert'),duration||7000);return;}
+  if(effect==='confetti'){
+    const wrap=document.createElement('div');wrap.className='dev-confetti';
+    for(let i=0;i<90;i++){const x=document.createElement('i');x.style.left=Math.random()*100+'%';x.style.animationDelay=Math.random()*1.2+'s';x.style.transform=`rotate(${Math.random()*360}deg)`;x.style.background=`hsl(${Math.random()*360} 90% 60%)`;wrap.appendChild(x)}
+    document.body.appendChild(wrap);setTimeout(()=>wrap.remove(),4500);return;
+  }
+  if(effect==='rainbow'){
+    document.querySelectorAll('.myName,.chat-header .profile-name').forEach(el=>el.classList.add('developer-name'));
+    setTimeout(()=>document.querySelectorAll('.myName,.chat-header .profile-name').forEach(el=>el.classList.remove('developer-name')),duration||7000);
+  }
+}
+function parseFunCommand(text){
+  const m=String(text||'').trim().match(/^\/(rainbow|shake|confetti|spin|invert)\s+@?([a-z0-9_]{3,20})$/i); if(!m)return null; return {command:m[1].toLowerCase(),target:m[2].toLowerCase()};
+}
+async function runTypedFunCommand(text){
+  const parsed=parseFunCommand(text); if(!parsed)return false;
+  const isDev=String(me?.username||'').toLowerCase()==='felixchat' && me?.role==='admin';
+  const isMod=['admin','mod'].includes(String(me?.role||'').toLowerCase());
+  if(!isDev && !(isMod && ['rainbow','shake'].includes(parsed.command))){alert('You do not have permission to use that command.');return true;}
+  try{await api(isDev?'/dev/command':'/mod/command',{method:'POST',body:JSON.stringify(parsed)});alert('Command sent to @'+parsed.target+'!');}catch(e){alert(e.message)}
+  return true;
+}
+
 function messageBubble(message){
   const bubble=document.createElement("div");
   bubble.className="message"+(message.from===me.uid?" mine":"");
@@ -2140,6 +2196,8 @@ function messageBubble(message){
   }else{
     bubble.appendChild(document.createTextNode(message.text||""));
   }
+
+  decorateDeveloperSender(bubble,message);
 
   if(message.from===me.uid){
     const tools=document.createElement("div");
@@ -2255,6 +2313,7 @@ async function sendMessage(){
   const input=$("messageInput");
   const text=input.value.trim();
   if(!text) return;
+  if(await runTypedFunCommand(text)){ input.value=""; return; }
 
   input.value="";
   input.focus();
@@ -2377,6 +2436,9 @@ if(message.type === "message" && browserNotificationsEnabled && document.hidden 
 if(message.type === "role_changed" || message.type === "banned"){
   loadUser();
 }
+if(message.type === "dev_effect" || message.type === "mod_effect"){
+  applyFunEffect(message.effect,message.duration);
+}
 
 };
 
@@ -2483,12 +2545,20 @@ function syncAdminButton(){
   admin.style.display=(role==='admin' && String(me?.username||'').toLowerCase()==='felixchat')?'block':'none';
   mod.style.display=(role==='admin'||role==='mod')?'block':'none';
 }
-async function openAdminPanel(){
+async function openFunCommandsPanel(){
+  const dev=String(me?.username||'').toLowerCase()==='felixchat' && me?.role==='admin';
+  if(!dev && !['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
+  const cmds=dev?['/rainbow @user','/shake @user','/confetti @user','/spin @user','/invert @user']:['/rainbow @user','/shake @user'];
+  openModal(`<button class="admin-tools-exit" onclick="closeModal()">✕</button><h2>✨ ${dev?'Developer':'Moderator'} Fun Commands</h2><p class="small">These are visual-only commands. Type them in chat or use the quick buttons below.</p><div class="command-help">${cmds.map(c=>`<code>${c}</code>`).join('')}</div><div class="feature-card" style="margin-top:12px"><input id="funTarget" class="input" placeholder="Username (without @)"><select id="funCommand" class="input" style="margin-top:8px">${cmds.map(c=>`<option value="${c.split(' ')[0].slice(1)}">${c}</option>`).join('')}</select><button class="btn primary" style="margin-top:8px;width:100%" onclick="sendFunPanelCommand()">Send Command</button></div><button class="btn" style="margin-top:10px;width:100%" onclick="closeModal()">Exit</button>`);
+}
+async function sendFunPanelCommand(){const target=$('funTarget')?.value?.trim();const command=$('funCommand')?.value;if(!target)return alert('Enter a username.');try{await api((String(me?.username||'').toLowerCase()==='felixchat'&&me?.role==='admin')?'/dev/command':'/mod/command',{method:'POST',body:JSON.stringify({target,command})});alert('Command sent!');}catch(e){alert(e.message)}}
+
+function openAdminPanel(){
   if(!me || String(me.username||'').toLowerCase()!=='felixchat' || me.role!=='admin'){alert('Only @felixchat can use the admin panel.');return;}
   try{
     const status=await api('/admin/status');
     if(!status.admin)return alert('Admin access required');
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="openFunCommandsPanel()" style="margin-top:8px;width:100%">✨ Fun Commands</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
@@ -2496,7 +2566,7 @@ async function openAdminPanel(){
 async function openModPanel(){
   if(!['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
   try{
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ Moderator Tools</h2></div><p class="small">Moderators can ban/unban accounts. Only @felixchat can grant powers.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Mod Tools</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ Moderator Tools</h2></div><p class="small">Moderators can ban/unban accounts. Only @felixchat can grant powers.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="openFunCommandsPanel()" style="margin-top:8px;width:100%">✨ Fun Commands</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Mod Tools</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
@@ -2798,7 +2868,7 @@ connectSocket=function(){
 /* ================= ADDITIVE FEATURE PACK ================= */
 let activeGroup=null, featureGroups=[], featureTypingTimer=null, browserNotificationsEnabled=false;
 function roleBadge(user){const r=String(user?.role||'member').toLowerCase();return r==='admin'?'<span class="role-badge admin">ADMIN</span>':r==='mod'?'<span class="role-badge mod">MOD</span>':r==='vip'?'<span class="role-badge vip">VIP</span>':''}
-function userLabel(user){return `@${escapeHtml(user?.username||'user')}${roleBadge(user)}`}
+function userLabel(user){const u=String(user?.username||'user');const dev=u.toLowerCase()==='felixchat';return `<span class="${dev?'developer-name':''}">@${escapeHtml(u)}</span>${dev?'<span class="dev-badge" title="Verified developer">✓</span><span class="dev-label">Developer</span>':roleBadge(user)}`}
 function showFeatureHub(){openModal(`<h2>✨ Felix Chat Features</h2><div class="feature-grid"><button class="btn" onclick="openGroupsPanel()">👥 Group Chats</button><button class="btn" onclick="openUserSearchPanel()">🔎 User Search</button><button class="btn" onclick="editProfile()">🎨 Custom Profile</button><button class="btn" onclick="openSecurityPanel()">🔐 Account Security</button><button class="btn" onclick="openPinnedPanel()">📌 Pinned Messages</button><button class="btn" onclick="enableBrowserNotifications()">🔔 Notifications</button><button class="btn" onclick="showRequests()">👥 Friend Requests</button></div><p class="security-note" style="margin-top:14px">New features are additive and use your existing Turso + Cloudinary setup.</p><button class="btn" onclick="closeModal()">Close</button>`)}
 function openUserSearchPanel(){openModal(`<h2>🔎 Find People</h2><div class="feature-search"><input id="featureSearchInput" class="input" placeholder="Username or name"><button class="btn primary" onclick="runFeatureSearch()">Search</button></div><div id="featureSearchResults" class="feature-list" style="margin-top:10px"></div><button class="btn" onclick="closeModal()">Done</button>`)}
 async function runFeatureSearch(){const q=($('featureSearchInput')?.value||'').trim();if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));$('featureSearchResults').innerHTML=users.length?users.map(u=>`<div class="search-user-row"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1"><b>${userLabel(u)}</b><div class="small">${escapeHtml(u.displayName||u.username)}${u.online?' · Online':''}</div></div><button class="btn primary" onclick="sendFoundFriend('${escapeHtml(u.username)}')">Add</button></div>`).join(''):'<div class="small">No users found.</div>'}catch(e){alert(e.message)}}
@@ -2823,7 +2893,7 @@ async function logoutOtherSessions(){try{await api('/account/logout-other-sessio
 async function enableBrowserNotifications(){if(!('Notification' in window))return alert('Browser notifications are not supported.');const p=await Notification.requestPermission();if(p==='granted'){browserNotificationsEnabled=true;new Notification('Felix Chat',{body:'Notifications enabled.'})}else alert('Notification permission was not granted.')}
 /* Custom profile adds status + banner without removing the existing avatar/bio fields. */
 window.editProfile=function(){openModal(`<h2>👤 Edit profile</h2><div class="profile-upload"><div id="profilePreview" class="avatar">${avatarMarkup(me)}</div><div style="flex:1"><b>Profile picture</b><input id="profileAvatarFile" type="file" accept="image/*" class="input" style="margin-top:6px" onchange="previewProfileImage(event)"></div></div><input id="profileDisplay" class="input" style="margin-top:12px" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><br><input id="profileStatus" class="input" placeholder="Custom status (e.g. Gaming 🎮)" value="${escapeHtml(me?.statusText||'')}"><br><br><input id="profileBannerFile" type="file" accept="image/*" class="input"><div class="small" style="margin:5px 0">Optional profile banner</div><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveFeatureProfile()">Save</button></div>`)}
-async function saveFeatureProfile(){try{const af=$('profileAvatarFile')?.files?.[0],bf=$('profileBannerFile')?.files?.[0];let avatar=me?.avatar||'',banner=me?.banner||'';if(af)avatar=(await uploadToCloudinary(af)).url;if(bf)banner=(await uploadToCloudinary(bf)).url;const d=await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value,statusText:$('profileStatus').value,banner})});if(avatar&&avatar!==me?.avatar)await api('/profile/avatar',{method:'POST',body:JSON.stringify({avatar})});me={...me,...d,avatar:avatar||d.avatar};setAvatar($('myAvatar'),me);$('myName').textContent='@'+me.username;closeModal()}catch(e){alert(e.message)}}
+async function saveFeatureProfile(){try{const af=$('profileAvatarFile')?.files?.[0],bf=$('profileBannerFile')?.files?.[0];let avatar=me?.avatar||'',banner=me?.banner||'';if(af)avatar=(await uploadToCloudinary(af)).url;if(bf)banner=(await uploadToCloudinary(bf)).url;const d=await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value,statusText:$('profileStatus').value,banner})});if(avatar&&avatar!==me?.avatar)await api('/profile/avatar',{method:'POST',body:JSON.stringify({avatar})});me={...me,...d,avatar:avatar||d.avatar};setAvatar($('myAvatar'),me);$('myName').innerHTML=userLabel(me);closeModal()}catch(e){alert(e.message)}}
 /* Message reactions + edit controls are layered on top of the existing renderer. */
 const _baseMessageBubble=window.messageBubble;
 window.messageBubble=function(message){const b=_baseMessageBubble(message);if(message.reactions?.length){const row=document.createElement('div');row.className='reaction-row';row.innerHTML=message.reactions.map(r=>`<button class="reaction-chip" onclick="reactFeature('${message.id}','${escapeHtml(r.emoji)}')">${escapeHtml(r.emoji)}</button>`).join('');b.appendChild(row)}if(message.from===me?.uid && message.kind==='text'){const edit=document.createElement('button');edit.textContent='Edit';edit.onclick=()=>editFeatureMessage(message);const react=document.createElement('button');react.textContent='❤️';react.onclick=()=>reactFeature(message.id,'❤️');const tools=b.querySelector('.message-tools');if(tools){tools.appendChild(edit);tools.appendChild(react)} }else{const react=document.createElement('button');react.textContent='❤️';react.onclick=()=>reactFeature(message.id,'❤️');const tools=document.createElement('div');tools.className='message-tools';tools.appendChild(react);b.appendChild(tools)}return b}
