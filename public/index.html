@@ -1248,6 +1248,12 @@ button:focus-visible,input:focus-visible{
   }
 }
 
+
+/* Added calling + uploaded profile pictures */
+.avatar{overflow:hidden;position:relative}.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.call-actions{display:flex;gap:6px;margin-left:auto}.call-btn{width:auto;min-width:42px;height:36px;padding:0 10px;border-radius:10px;background:#171d35;border:1px solid #354264;color:#fff;font-weight:800}.call-btn.video{background:linear-gradient(135deg,#8b5cf6,#ec4899);border-color:transparent}
+.call-overlay{position:fixed;inset:0;z-index:20000;background:rgba(5,7,16,.94);backdrop-filter:blur(18px);display:none;align-items:center;justify-content:center;padding:18px}.call-card{width:min(720px,100%);background:#11162a;border:1px solid #354264;border-radius:24px;padding:18px;box-shadow:0 25px 80px #000b;display:flex;flex-direction:column;gap:12px}.call-title{font-size:20px;font-weight:900}.call-sub{color:#9aa6c2;font-size:13px}.call-video-stage{position:relative;background:#05070d;border-radius:18px;overflow:hidden;min-height:260px;aspect-ratio:16/9}.call-video-stage video{width:100%;height:100%;object-fit:contain;background:#05070d}.call-video-stage #localVideo{position:absolute;right:12px;bottom:12px;width:26%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff4;border-radius:14px;display:none}.call-audio-icon{font-size:64px;text-align:center;padding:70px 0}.call-controls,.incoming-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.call-control{padding:11px 18px;border-radius:12px;background:#202946;color:#fff;border:1px solid #3a4769;font-weight:800}.call-control.end{background:#d83f5d;border-color:#d83f5d}.profile-upload{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed #3a4769;border-radius:12px;background:#0d1322}
+@media(max-width:700px){.call-btn{width:40px;min-width:40px;padding:0}.call-btn span{display:none}.chat-header .profile{min-width:0}.call-card{border-radius:18px;padding:12px}.call-video-stage{min-height:220px}.call-control{min-height:44px}}
 </style>
 </head>
 
@@ -1369,7 +1375,7 @@ Choose a friend
 </div>
 
 </div>
-
+<div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call">📞 <span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime">📹 <span>FaceTime</span></button></div>
 </header>
 
 <section id="storyStrip" class="story-strip"></section>
@@ -1654,6 +1660,10 @@ alert(error.message);
 }
 
 
+/* AVATARS */
+function avatarMarkup(user){return user?.avatar?`<img src="${escapeHtml(user.avatar)}" alt="" onerror="this.style.display='none'">`:initials(user?.username||'')}
+function setAvatar(el,user){if(el)el.innerHTML=avatarMarkup(user)}
+
 /* LOAD USER */
 
 async function loadUser(){
@@ -1666,8 +1676,7 @@ await api("/me");
 $("myName").textContent =
 "@" + me.username;
 
-$("myAvatar").textContent =
-initials(me.username);
+setAvatar($("myAvatar"),me);
 
 renderFriends();
 
@@ -1720,11 +1729,7 @@ element.classList.add(
 
 element.innerHTML = `
 
-<div class="avatar">
-
-${initials(friend.username)}
-
-</div>
+<div class="avatar">${avatarMarkup(friend)}</div>
 
 <div class="friend-info">
 
@@ -1994,8 +1999,8 @@ friend;
 $("friendName").textContent =
 "@" + friend.username;
 
-$("friendAvatar").textContent =
-initials(friend.username);
+setAvatar($("friendAvatar"),friend);
+$("callActions").style.display="flex";
 
 $("friendStatus").textContent =
 friend.online
@@ -2412,55 +2417,12 @@ async function adminUnban(uid){
 
 async function searchUsers(){const q=($('quickSearch')?.value||'').trim();if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));let html='<h2>🔎 People</h2>';if(!users.length)html+='<p>No users found.</p>';users.forEach(u=>{html+=`<div class="request"><div class="avatar">${initials(u.username)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)}</div></b><button class="btn primary" onclick="sendFoundFriend('${u.username}')">Add</button></div>`});html+='<button class="btn" onclick="closeModal()">Done</button>';openModal(html)}catch(e){alert(e.message)}}
 async function sendFoundFriend(username){try{await api('/friends/request',{method:'POST',body:JSON.stringify({username})});alert('Friend request sent!')}catch(e){alert(e.message)}}
-function editProfile(){openModal(`<h2>👤 Edit profile</h2><input id="profileDisplay" class="input" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><br><br><input id="profileAvatar" class="input" placeholder="Avatar image URL (optional)" value="${escapeHtml(me?.avatar||'')}"><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProfile()">Save</button></div>`)}
-async function saveProfile(){try{await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value,avatar:$('profileAvatar').value})});closeModal();await loadUser()}catch(e){alert(e.message)}}
-
-// Notifications for incoming messages.
-let notificationCount=0;
-let notifications=[];
-function updateNotificationBadge(){const b=$('notificationBadge');if(!b)return;b.textContent=notificationCount>99?'99+':String(notificationCount);b.style.display=notificationCount?'block':'none';}
-async function loadUnreadNotifications(){try{const list=await api('/notifications/unread');notifications=list.map(x=>({uid:x.uid,name:x.displayName||x.username,text:x.kind==='image'?'📷 Photo':x.kind==='video'?'🎥 Video':x.kind==='voice'?'🎙️ Voice message':(x.text||'New message').slice(0,100),time:x.time}));notificationCount=notifications.length;updateNotificationBadge();}catch(e){}}
-function notifyNewMessage(m){if(!m||!me||m.from===me.uid)return;const friend=me.friends?.find(f=>f.uid===m.from);const name=friend?.displayName||friend?.username||'Someone';const preview=m.kind==='image'?'📷 Photo':m.kind==='video'?'🎥 Video':m.kind==='voice'?'🎙️ Voice message':(m.text||'New message').slice(0,100);if(activeFriend&&activeFriend.uid===m.from){return;}notifications.unshift({uid:m.from,name,text:preview,time:Date.now()});notifications=notifications.slice(0,50);notificationCount++;updateNotificationBadge();showNotificationToast(name,preview,m.from);try{if('Notification'in window&&Notification.permission==='granted'&&document.visibilityState!=='visible'){const n=new Notification('@'+name,{body:preview});n.onclick=()=>{window.focus();openNotificationChat(m.from);n.close()}}}catch(e){}}
-function showNotificationToast(name,text,uid){const old=document.querySelector('.toast-notification');if(old)old.remove();const t=document.createElement('div');t.className='toast-notification';t.innerHTML=`<b>💬 @${escapeHtml(name)}</b><span>${escapeHtml(text)}</span>`;t.onclick=()=>{openNotificationChat(uid);t.remove()};document.body.appendChild(t);setTimeout(()=>t.remove(),5000)}
-async function requestNotificationPermission(){try{if('Notification'in window&&Notification.permission==='default')await Notification.requestPermission()}catch(e){}}
-function showNotifications(){const items=notifications.length?notifications.map(n=>`<div class="notification-item" onclick="openNotificationChat('${n.uid}')"><b>💬 @${escapeHtml(n.name)}</b><div class="small">${escapeHtml(n.text)}</div></div>`).join(''):'<p>No unread messages.</p>';notificationCount=0;updateNotificationBadge();openModal(`<h2>🔔 Notifications</h2><p class="small">You'll be notified here when someone messages you.</p><div class="notification-list">${items}</div><div class="row"><button class="btn" onclick="requestNotificationPermission()">Enable desktop notifications</button><button class="btn" onclick="closeModal()">Done</button></div>`)}
-function openNotificationChat(uid){const f=me?.friends?.find(x=>x.uid===uid);closeModal();if(f)selectFriend(f)}
-
-// FelixChat-only commands: /ban username and /unban username.
-async function handleAdminChatCommand(text){if(!me||String(me.username||'').toLowerCase()!=='felixchat')return false;const m=String(text||'').trim().match(/^\/(ban|unban)\s+([a-zA-Z0-9_]{3,20})$/i);if(!m)return false;try{const r=await api('/admin/command',{method:'POST',body:JSON.stringify({command:m[1].toLowerCase(),username:m[2].toLowerCase()})});showNotificationToast('FelixChat Admin',`@${r.username} ${r.action==='ban'?'was banned':'was unbanned'}`,me.uid)}catch(e){alert(e.message)}return true}
-
-// Enhance message bubbles without replacing the existing media/delete implementation.
-const originalMessageBubble=messageBubble;
-messageBubble=function(message){const b=originalMessageBubble(message);if(message.from===me.uid||message.kind==='text'){const actions=document.createElement('div');actions.className='message-actions';const react=document.createElement('button');react.textContent='❤️';react.onclick=()=>reactToMessage(message.id,'❤️');actions.appendChild(react);if(message.kind==='text'&&message.from===me.uid){const edit=document.createElement('button');edit.textContent='Edit';edit.onclick=()=>editMessage(message);actions.appendChild(edit)}b.appendChild(actions)}return b}
-async function reactToMessage(id,emoji){if(!activeFriend)return;try{await api('/messages/'+activeFriend.uid+'/'+id+'/react',{method:'POST',body:JSON.stringify({emoji})})}catch(e){alert(e.message)}}
-async function editMessage(m){const text=prompt('Edit message:',m.text||'');if(text===null||!text.trim())return;try{await api('/messages/'+activeFriend.uid+'/'+m.id,{method:'PATCH',body:JSON.stringify({text})});await loadMessages()}catch(e){alert(e.message)}}
-
-// Typing indicator + read receipts.
-const originalSendMessage=sendMessage;
-sendMessage=async function(){const input=$('messageInput');const text=input?.value?.trim()||'';if(await handleAdminChatCommand(text)){input.value='';return;}await originalSendMessage()}
-$('messageInput').addEventListener('input',()=>{if(!activeFriend)return;api('/typing/'+activeFriend.uid,{method:'POST',body:JSON.stringify({typing:true})}).catch(()=>{});clearTimeout(typingTimer);typingTimer=setTimeout(()=>api('/typing/'+activeFriend.uid,{method:'POST',body:JSON.stringify({typing:false})}).catch(()=>{}),900)});
-const originalConnectSocket=connectSocket;
-connectSocket=function(){originalConnectSocket();setTimeout(()=>{if(socket){const old=socket.onmessage;socket.onmessage=(event)=>{try{const m=JSON.parse(event.data);if(m.type==='typing'&&activeFriend&&m.uid===activeFriend.uid){$('typingIndicator').textContent=m.typing?'typing...':''}if(m.type==='message'&&m.message)notifyNewMessage(m.message);if(m.type==='message_read'){const el=$('messages').querySelector('[data-message-id="'+CSS.escape(m.messageId)+'"]');if(el)el.title='Seen'}if(m.type==='message_edited'){const el=$('messages').querySelector('[data-message-id="'+CSS.escape(m.message.id)+'"]');if(el){el.replaceWith(messageBubble(m.message))}}if(m.type==='reaction'){}if(m.type==='story_added')showStories().catch(()=>{});if(m.type==='banned'){alert('Your account has been banned.');localStorage.removeItem('felix_token');location.reload()}}catch(e){} if(old)old(event)}}},50)};
-
-const originalSelectFriend=selectFriend;
-selectFriend=async function(friend){await originalSelectFriend(friend);mobileShowChat();$('typingIndicator').textContent='';setTimeout(()=>{document.querySelectorAll('#messages .message').forEach(el=>{const id=el.dataset.messageId;if(id)api('/messages/'+friend.uid+'/'+id+'/read',{method:'POST'}).catch(()=>{})})},250)};
-
-function mobileShowChat(){if(window.innerWidth<=700){document.body.classList.add('mobile-chat-open');}}
-function mobileShowChats(){if(window.innerWidth<=700){document.body.classList.remove('mobile-chat-open');activeFriend=null;$('messageInput').disabled=true;}}
-const _mobileSelectFriend=selectFriend;
-selectFriend=async function(friend){await _mobileSelectFriend(friend);mobileShowChat();};
-
-// Load stories after authentication.
-const originalLoadUser=loadUser;
-loadUser=async function(){
-  await originalLoadUser();
-  syncAdminButton();
-  try{storiesCache=await api('/stories');renderStories();}catch(e){}
-  await loadUnreadNotifications();
-  try{const status=await api('/admin/status');if(status.admin)syncAdminButton();}catch(e){}
-}
+function editProfile(){openModal(`<h2>👤 Edit profile</h2><div class="profile-upload"><div id="profilePreview" class="avatar">${avatarMarkup(me)}</div><div style="flex:1"><b>Profile picture</b><input id="profileAvatarFile" type="file" accept="image/*" class="input" style="margin-top:6px" onchange="previewProfileImage(event)"></div></div><br><input id="profileDisplay" class="input" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProfile()">Save</button></div>`)}
+function previewProfileImage(event){const f=event.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('profilePreview').innerHTML=`<img src="${r.result}" alt="">`};r.readAsDataURL(f)}
+async function saveProfile(){try{const file=$('profileAvatarFile')?.files?.[0];if(file){if(!file.type.startsWith('image/'))throw new Error('Choose an image file.');if(file.size>10*1024*1024)throw new Error('Profile pictures must be 10 MB or smaller.');const form=new FormData();form.append('file',file);const r=await fetch(API+'/profile/avatar',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Profile picture upload failed')}await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value})});closeModal();await loadUser()}catch(e){alert(e.message)}}
 setInterval(()=>{if(me && String(me.username||'').toLowerCase()==='felixchat')syncAdminButton()},1500);
 </script>
+<div id="callOverlay" class="call-overlay"><div class="call-card"><div><div id="callTitle" class="call-title">Call</div><div id="callSub" class="call-sub">Connecting…</div></div><div class="call-video-stage"><div id="callAudioIcon" class="call-audio-icon">📞</div><video id="remoteVideo" autoplay playsinline style="display:none"></video><video id="localVideo" autoplay muted playsinline></video></div><div id="incomingActions" class="incoming-actions" style="display:none"><button class="call-control" onclick="acceptIncomingCall()">✅ Accept</button><button class="call-control end" onclick="rejectIncomingCall()">✕ Decline</button></div><div id="callControls" class="call-controls"><button class="call-control end" onclick="endCall()">📞 End</button></div></div></div>
 </body>
 
 </html>
