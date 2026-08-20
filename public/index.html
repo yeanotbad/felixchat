@@ -1249,6 +1249,15 @@ button,.btn,.icon-btn,.send,.friend,.story-card,.request,.notification-item{
   .admin-tools-search button{width:100%}
 }
 
+
+/* Full-screen announcements */
+.announcement-overlay{position:fixed;inset:0;z-index:99999;background:rgba(5,8,18,.94);backdrop-filter:blur(14px);display:none;align-items:center;justify-content:center;padding:24px}
+.announcement-card{width:min(900px,94vw);max-height:92dvh;overflow:auto;background:#11182a;border:1px solid rgba(139,92,246,.45);border-radius:24px;box-shadow:0 30px 100px rgba(0,0,0,.6);padding:28px;position:relative}
+.announcement-close{position:absolute;right:18px;top:18px;width:42px;height:42px;border-radius:12px;border:1px solid #3a4769;background:#202946;color:#fff;font-size:20px;cursor:pointer}
+.announcement-card h2{margin:0 55px 6px 0;font-size:28px}.announcement-by{color:#aab5d1;font-size:13px;margin-bottom:18px}.announcement-text{font-size:18px;line-height:1.6;white-space:pre-wrap;margin-bottom:18px}.announcement-media img,.announcement-media video{display:block;max-width:100%;max-height:60dvh;margin:auto;border-radius:16px}.announcement-media audio{width:100%;margin-top:10px}
+.announce-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.announce-form .full{grid-column:1/-1}.announce-targets{max-height:300px;overflow:auto;border:1px solid #303b59;border-radius:12px;padding:8px}.announce-target-user{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px}.announce-target-user:hover{background:#1b2440}
+@media(max-width:760px){.announce-form{grid-template-columns:1fr}.announce-form .full{grid-column:auto}.announcement-card{padding:20px}.announcement-overlay{padding:10px}}
+
 /* Notification toast */
 .toast-notification{
   background:linear-gradient(135deg,#171c35,#11162a);
@@ -2432,7 +2441,7 @@ async function openAdminPanel(){
   try{
     const status=await api('/admin/status');
     if(!status.admin)return alert('Admin access required');
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:12px;width:100%">Exit Admin Panel</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
@@ -2440,7 +2449,7 @@ async function openAdminPanel(){
 async function openModPanel(){
   if(!['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
   try{
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ Moderator Tools</h2></div><p class="small">Moderators can ban/unban accounts. Only @felixchat can grant powers.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:12px;width:100%">Exit Mod Tools</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ Moderator Tools</h2></div><p class="small">Moderators can ban/unban accounts. Only @felixchat can grant powers.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Mod Tools</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
@@ -2530,6 +2539,33 @@ function showFriendRequestToast(username,uid){
   stack.appendChild(el);
   setTimeout(()=>el.remove(),15000);
 }
+
+
+let announcementSelected=new Set();
+async function openAnnouncementComposer(){
+  if(!['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
+  announcementSelected=new Set();
+  openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>📢 Announce</h2></div><p class="small">Send a full-screen announcement with text, an image, video, or audio.</p><div class="announce-form"><textarea id="announcementText" class="input full" rows=5 placeholder="Write your announcement..."></textarea><div><b>Audience</b><div style="margin-top:8px"><label><input type="radio" name="announceAudience" value="all" checked onchange="toggleAnnouncementAudience()"> Everyone</label><br><label><input type="radio" name="announceAudience" value="selected" onchange="toggleAnnouncementAudience()"> Selected people</label></div></div><div><b>Media</b><input id="announcementFile" type="file" class="input" accept="image/*,video/*,audio/*" style="margin-top:8px"></div><div id="announcementTargetsWrap" class="full" style="display:none"><div style="display:flex;gap:8px;margin-bottom:8px"><input id="announcementUserSearch" class="input" placeholder="Search users..."><button class="btn" onclick="loadAnnouncementUsers()">Search</button></div><div id="announcementTargets" class="announce-targets">Loading...</div></div><div class="row full"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="sendAnnouncement()">📢 Send Announcement</button></div></div>`);
+  $('modalBox').classList.add('admin-tools-box');
+}
+function toggleAnnouncementAudience(){const selected=document.querySelector('input[name="announceAudience"]:checked')?.value==='selected';const wrap=$('announcementTargetsWrap');if(wrap)wrap.style.display=selected?'block':'none';if(selected)loadAnnouncementUsers();}
+async function loadAnnouncementUsers(){const box=$('announcementTargets');if(!box)return;try{const q=($('announcementUserSearch')?.value||'').trim();const users=await api('/announcement/users?q='+encodeURIComponent(q));box.innerHTML=users.length?users.map(u=>`<label class="announce-target-user"><input type="checkbox" ${announcementSelected.has(u.uid)?'checked':''} onchange="toggleAnnouncementTarget('${u.uid}',this.checked)"><div class="avatar" style="width:36px;height:36px">${avatarMarkup(u)}</div><span><b>@${escapeHtml(u.username)}</b><div class="small">${escapeHtml(u.displayName||u.username)}</div></span></label>`).join(''):'<div class="small">No users found.</div>'}catch(e){box.innerHTML='<div class="small">'+escapeHtml(e.message)+'</div>'}}
+function toggleAnnouncementTarget(uid,on){if(on)announcementSelected.add(uid);else announcementSelected.delete(uid)}
+async function sendAnnouncement(){
+  const audience=document.querySelector('input[name="announceAudience"]:checked')?.value||'all';
+  const text=($('announcementText')?.value||'').trim();const file=$('announcementFile')?.files?.[0];
+  if(!text&&!file)return alert('Add text or choose an image, video, or audio file.');
+  if(audience==='selected'&&!announcementSelected.size)return alert('Select at least one person.');
+  if(file&&file.size>50*1024*1024)return alert('File is over 50 MB.');
+  const form=new FormData();form.append('text',text);form.append('targetMode',audience);form.append('targets',JSON.stringify([...announcementSelected]));if(file)form.append('file',file);
+  try{const r=await fetch(API+'/announcements',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Announcement failed');closeModal();alert('Announcement sent.')}catch(e){alert(e.message)}
+}
+function showAnnouncement(a){
+  const media=a.kind==='image'?`<div class="announcement-media"><img src="${a.url}" alt="Announcement"></div>`:a.kind==='video'?`<div class="announcement-media"><video src="${a.url}" controls autoplay playsinline></video></div>`:a.kind==='audio'?`<div class="announcement-media"><audio src="${a.url}" controls autoplay></audio></div>`:'';
+  const text=a.text?`<div class="announcement-text">${escapeHtml(a.text)}</div>`:'';
+  const safeName=escapeHtml(a.senderDisplayName||a.senderUsername||'Moderator');
+  const old=$('announcementOverlay');if(old)old.remove();const el=document.createElement('div');el.id='announcementOverlay';el.className='announcement-overlay';el.innerHTML=`<div class="announcement-card"><button class="announcement-close" onclick="closeAnnouncement()">✕</button><h2>📢 Announcement</h2><div class="announcement-by">From ${safeName}${a.senderUsername?' (@'+escapeHtml(a.senderUsername)+')':''}</div>${text}${media}<button class="btn primary" style="width:100%;margin-top:20px" onclick="closeAnnouncement()">OK</button></div>`;document.body.appendChild(el);el.style.display='flex';}
+function closeAnnouncement(){const el=$('announcementOverlay');if(el)el.remove()}
 
 setInterval(()=>{if(me)syncAdminButton()},1500);
 </script>
@@ -2636,6 +2672,7 @@ function cleanupCall(){
   if($('callOverlay'))$('callOverlay').style.display='none';
 }
 function handleCallMessage(m){
+  if(m?.type==='announcement'){showAnnouncement(m.announcement||{});return;}
   if(!m||!m.from)return;
   if(m.type==='call_invite'){
     if(callState!=='idle'){
