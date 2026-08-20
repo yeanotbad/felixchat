@@ -146,13 +146,34 @@ app.post('/api/profile/avatar',auth,upload.single('file'),async(req,res)=>{
   try{
     if(!req.file)return res.status(400).json({error:'No image selected'});
     const mime=req.file.mimetype||'';
-    if(!mime.startsWith('image/')){fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Profile picture must be an image'});}
-    const url='/uploads/'+path.basename(req.file.path);
-    const old=await getUser(req.uid);
-    await db.execute({sql:'UPDATE users SET avatar=? WHERE uid=?',args:[url,req.uid]});
-    if(old?.avatar?.startsWith('/uploads/'))fs.unlink(path.join(UPLOADS,path.basename(old.avatar)),()=>{});
-    res.json({ok:true,avatar:url});
-  }catch(e){if(req.file)fs.unlink(req.file.path,()=>{});res.status(500).json({error:'Profile picture upload failed'});}
+    if(!mime.startsWith('image/')){
+      fs.unlink(req.file.path,()=>{});
+      return res.status(400).json({error:'Profile picture must be an image'});
+    }
+
+    // IMPORTANT: Render's local filesystem is not permanent.
+    // Store the actual image in Turso so the profile picture survives
+    // restarts, redeploys and moving between devices.
+    const stat=fs.statSync(req.file.path);
+    if(stat.size>3*1024*1024){
+      fs.unlink(req.file.path,()=>{});
+      return res.status(400).json({error:'Profile picture must be 3 MB or smaller'});
+    }
+    const base64=fs.readFileSync(req.file.path).toString('base64');
+    const avatar=`data:${mime};base64,${base64}`;
+
+    await db.execute({
+      sql:'UPDATE users SET avatar=? WHERE uid=?',
+      args:[avatar,req.uid]
+    });
+
+    fs.unlink(req.file.path,()=>{});
+    res.json({ok:true,avatar});
+  }catch(e){
+    if(req.file)fs.unlink(req.file.path,()=>{});
+    console.error('Profile picture upload failed:',e);
+    res.status(500).json({error:'Profile picture upload failed'});
+  }
 });
 
 app.get('/api/users/search',auth,async(req,res)=>{const q=clean(req.query.q).toLowerCase(); if(!q) return res.json([]); const r=await db.execute({sql:`SELECT * FROM users WHERE username LIKE ? OR display_name LIKE ? LIMIT 20`,args:[`%${q}%`,`%${q}%`]});res.json(r.rows.filter(x=>x.uid!==req.uid).map(x=>publicUser(x,(sockets.get(x.uid)?.size||0)>0)));});
