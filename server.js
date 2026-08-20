@@ -47,6 +47,9 @@ async function init() {
     `ALTER TABLE users ADD COLUMN banned_at INTEGER`,
     `ALTER TABLE users ADD COLUMN banned_by TEXT`
   ]) { try { await db.execute(sql); } catch (e) {} }
+  // The @felixchat account is the sole owner of the admin powers.
+  // This does not change any other account's role.
+  try { await db.execute({sql:`UPDATE users SET role='admin' WHERE username='felixchat'`,args:[]}); } catch (e) {}
 }
 
 app.use(express.json({ limit: '5mb' }));
