@@ -100,6 +100,12 @@ function publicUser(u, online=false){
 }
 
 app.get('/api/health', async (_req,res)=>res.json({ok:true, database:process.env.TURSO_DATABASE_URL?'turso':'local'}));
+app.get('/api/cloudinary-config', auth, async (_req,res)=>{
+  const cloudName=String(process.env.CLOUDINARY_CLOUD_NAME||'').trim();
+  const uploadPreset=String(process.env.CLOUDINARY_UPLOAD_PRESET||'').trim();
+  if(!cloudName||!uploadPreset) return res.status(503).json({error:'Cloudinary is not configured on the server.'});
+  res.json({cloudName,uploadPreset});
+});
 
 app.post('/api/register', async (req,res)=>{
   try {
@@ -154,34 +160,15 @@ app.patch('/api/profile',auth,async(req,res)=>{
   res.json({ok:true});
 });
 
-// Profile pictures are stored directly in Turso as a data URL.
-// This avoids Render's ephemeral filesystem, so the picture survives redeploys/restarts.
-app.post('/api/profile/avatar',auth,upload.single('file'),async(req,res)=>{
+// Profile pictures are stored as permanent Cloudinary URLs in Turso.
+app.post('/api/profile/avatar',auth,async(req,res)=>{
   try{
-    if(!req.file)return res.status(400).json({error:'No image selected'});
-    const mime=req.file.mimetype||'';
-    if(!mime.startsWith('image/')){fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Profile picture must be an image'});}
-    const stat=fs.statSync(req.file.path);
-    if(stat.size>1500000){fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Profile picture is too large. Choose a smaller image.'});}
-    const data=fs.readFileSync(req.file.path).toString('base64');
-    const avatar=`data:${mime};base64,${data}`;
+    const avatar=String(req.body?.avatar||'').trim().slice(0,2000);
+    if(!/^https:\/\/res\.cloudinary\.com\//i.test(avatar)) return res.status(400).json({error:'Invalid Cloudinary image URL'});
     await db.execute({sql:'UPDATE users SET avatar=? WHERE uid=?',args:[avatar,req.uid]});
-    fs.unlink(req.file.path,()=>{});
     res.json({ok:true,avatar});
-  }catch(e){if(req.file)fs.unlink(req.file.path,()=>{});console.error(e);res.status(500).json({error:'Profile picture upload failed'});}
+  }catch(e){console.error(e);res.status(500).json({error:'Profile picture upload failed'});}
 });
-
-app.get('/api/quick-add',auth,async(req,res)=>{
-  const r=await db.execute({sql:`SELECT u.* FROM users u
-    WHERE u.uid<>?
-      AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.uid=? AND b.blocked_uid=u.uid)
-      AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.uid=u.uid AND b.blocked_uid=?)
-      AND NOT EXISTS (SELECT 1 FROM friendships f WHERE f.user_id=? AND f.friend_id=u.uid AND f.status IN ('accepted','pending'))
-    ORDER BY RANDOM() LIMIT 10`,args:[req.uid,req.uid,req.uid,req.uid]});
-  res.json(r.rows.map(x=>publicUser(x,(sockets.get(x.uid)?.size||0)>0)));
-});
-
-app.get('/api/users/search',auth,async(req,res)=>{const q=clean(req.query.q).toLowerCase(); if(!q) return res.json([]); const r=await db.execute({sql:`SELECT * FROM users WHERE username LIKE ? OR display_name LIKE ? LIMIT 20`,args:[`%${q}%`,`%${q}%`]});res.json(r.rows.filter(x=>x.uid!==req.uid).map(x=>publicUser(x,(sockets.get(x.uid)?.size||0)>0)));});
 
 app.post('/api/friends/request',auth,async(req,res)=>{
   const username=clean(req.body.username).toLowerCase(); const r=await db.execute({sql:'SELECT * FROM users WHERE username=?',args:[username]}); const target=r.rows[0];
@@ -214,7 +201,7 @@ app.post('/api/messages/:uid/:messageId/react',auth,async(req,res)=>{const emoji
 app.delete('/api/messages/:uid/:messageId',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM messages WHERE id=? AND sender_id=?',args:[req.params.messageId,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'DELETE FROM messages WHERE id=?',args:[req.params.messageId]});pair(req.uid,r.rows[0].receiver_id,{type:'message_deleted',messageId:req.params.messageId});if(r.rows[0].url?.startsWith('/uploads/'))fs.unlink(path.join(UPLOADS,path.basename(r.rows[0].url)),()=>{});res.json({ok:true});});
 
 
-app.post('/api/upload/:uid',auth,upload.single('file'),async(req,res)=>{const other=req.params.uid;if(!await areFriends(req.uid,other)){if(req.file)fs.unlink(req.file.path,()=>{});return res.status(403).json({error:'Not friends'});}if(!req.file)return res.status(400).json({error:'No file'});const mime=req.file.mimetype||'application/octet-stream';const kind=mime.startsWith('image/')?'image':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'voice':'file';const m={id:id(),from:req.uid,to:other,text:'',kind,url:'/uploads/'+path.basename(req.file.path),name:String(req.file.originalname||'file').slice(0,120),mime,time:now(),readAt:null,expiresAt:null,replyTo:null,edited:false};await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,url,name,mime,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,'',kind,m.url,m.name,mime,m.time]});broadcast(other,{type:'message',message:m});res.json(m);});
+app.post('/api/upload/:uid',auth,async(req,res)=>{const other=req.params.uid;if(!await areFriends(req.uid,other))return res.status(403).json({error:'Not friends'});const url=String(req.body?.url||'').trim();if(!/^https:\/\/res\.cloudinary\.com\//i.test(url))return res.status(400).json({error:'Cloudinary media URL required'});const mime=String(req.body?.mime||'application/octet-stream');const kind=mime.startsWith('image/')?'image':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'voice':'file';const m={id:id(),from:req.uid,to:other,text:'',kind,url,name:String(req.body?.name||'file').slice(0,120),mime,time:now(),readAt:null,expiresAt:null,replyTo:null,edited:false};await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,url,name,mime,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,'',kind,m.url,m.name,mime,m.time]});broadcast(other,{type:'message',message:m});res.json(m);});
 
 app.post('/api/typing/:uid',auth,async(req,res)=>{broadcast(req.params.uid,{type:'typing',uid:req.uid,typing:!!req.body.typing});res.json({ok:true});});
 
@@ -229,7 +216,7 @@ app.get('/api/stories/mine',auth,async(req,res)=>{
   }
   res.json(out);
 });
-app.post('/api/stories',auth,upload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'Story file required'});const mime=req.file.mimetype||'';const kind=mime.startsWith('video/')?'video':'image';const story={id:id(),uid:req.uid,url:'/uploads/'+path.basename(req.file.path),kind,caption:String(req.body.caption||'').slice(0,180),time:now(),expiresAt:now()+86400000};await db.execute({sql:'INSERT INTO stories(id,uid,media_url,kind,caption,created_at,expires_at) VALUES(?,?,?,?,?,?,?)',args:[story.id,story.uid,story.url,story.kind,story.caption,story.time,story.expiresAt]});broadcast(req.uid,{type:'story_added',story});res.json(story);});
+app.post('/api/stories',auth,async(req,res)=>{const url=String(req.body?.url||'').trim();if(!/^https:\/\/res\.cloudinary\.com\//i.test(url))return res.status(400).json({error:'Cloudinary story URL required'});const mime=String(req.body?.mime||'image/*');const kind=mime.startsWith('video/')?'video':'image';const story={id:id(),uid:req.uid,url,kind,caption:String(req.body?.caption||'').slice(0,180),time:now(),expiresAt:now()+86400000};await db.execute({sql:'INSERT INTO stories(id,uid,media_url,kind,caption,created_at,expires_at) VALUES(?,?,?,?,?,?,?)',args:[story.id,story.uid,story.url,story.kind,story.caption,story.time,story.expiresAt]});broadcast(req.uid,{type:'story_added',story});res.json(story);});
 app.post('/api/stories/:id/view',auth,async(req,res)=>{await db.execute({sql:'INSERT OR REPLACE INTO story_views(story_id,uid,viewed_at) VALUES(?,?,?)',args:[req.params.id,req.uid,now()]});res.json({ok:true});});
 app.delete('/api/stories/:id',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM stories WHERE id=? AND uid=?',args:[req.params.id,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Story not found'});await db.execute({sql:'DELETE FROM stories WHERE id=?',args:[req.params.id]});if(r.rows[0].media_url.startsWith('/uploads/'))fs.unlink(path.join(UPLOADS,path.basename(r.rows[0].media_url)),()=>{});res.json({ok:true});});
 
@@ -333,34 +320,31 @@ app.get('/api/announcement/users',auth,async(req,res)=>{
   const r=await db.execute({sql:`SELECT uid,username,display_name,avatar,role FROM users WHERE username LIKE ? OR display_name LIKE ? ORDER BY username LIMIT 100`,args:[`%${q}%`,`%${q}%`]});
   res.json(r.rows.map(u=>({uid:u.uid,username:u.username,displayName:u.display_name||u.username,avatar:u.avatar||'',role:u.role||'member'})));
 });
-app.post('/api/announcements',auth,upload.single('file'),async(req,res)=>{
-  if(!await requireModerator(req,res)){if(req.file)fs.unlink(req.file.path,()=>{});return;}
+app.post('/api/announcements',auth,async(req,res)=>{
+  if(!await requireModerator(req,res))return;
   try{
-    const text=String(req.body.text||'').trim().slice(0,5000);
-    const targetMode=String(req.body.targetMode||'all').toLowerCase();
+    const text=String(req.body?.text||'').trim().slice(0,5000);
+    const targetMode=String(req.body?.targetMode||'all').toLowerCase();
     let targets=[];
     if(targetMode==='selected'){
-      try{targets=JSON.parse(String(req.body.targets||'[]'));}catch{targets=[];}
+      try{targets=JSON.parse(String(req.body?.targets||'[]'));}catch{targets=[];}
       targets=[...new Set(targets.map(x=>String(x)).filter(Boolean))];
-      if(!targets.length){if(req.file)fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Select at least one person.'});}
-    }else if(targetMode!=='all'){
-      if(req.file)fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Invalid announcement audience.'});
-    }
-    if(!text && !req.file){return res.status(400).json({error:'Add text or attach an image, video, or audio file.'});}
-    let kind='text',url='',name='',mime='';
-    if(req.file){mime=req.file.mimetype||'application/octet-stream';kind=mime.startsWith('image/')?'image':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file';url='/uploads/'+path.basename(req.file.path);name=String(req.file.originalname||'announcement').slice(0,120);}
+      if(!targets.length)return res.status(400).json({error:'Select at least one person.'});
+    }else if(targetMode!=='all')return res.status(400).json({error:'Invalid announcement audience.'});
+    const url=String(req.body?.url||'').trim();
+    const mime=String(req.body?.mime||'');
+    const name=String(req.body?.name||'announcement').slice(0,120);
+    if(!text&&!url)return res.status(400).json({error:'Add text or attach an image, video, or audio file.'});
+    if(url&&!/^https:\/\/res\.cloudinary\.com\//i.test(url))return res.status(400).json({error:'Invalid Cloudinary media URL'});
+    let kind='text';
+    if(url)kind=mime.startsWith('image/')?'image':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file';
     const a={id:id(),senderId:req.uid,text,kind,url,name,mime,time:now()};
     await db.execute({sql:'INSERT INTO announcements(id,sender_id,text,kind,url,name,mime,audience,targets_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',args:[a.id,a.senderId,a.text,a.kind,a.url,a.name,a.mime,targetMode,JSON.stringify(targets),a.time]});
     const sender=await getUser(req.uid);
     const payload={type:'announcement',announcement:{...a,senderUsername:sender?.username||'Moderator',senderDisplayName:sender?.display_name||sender?.username||'Moderator'}};
-    if(targetMode==='all'){
-      for(const [uid] of sockets)broadcast(uid,payload);
-    }else{
-      const valid=await db.execute({sql:`SELECT uid FROM users WHERE uid IN (${targets.map(()=>'?').join(',')})`,args:targets});
-      for(const row of valid.rows)broadcast(row.uid,payload);
-    }
+    if(targetMode==='all'){for(const [uid] of sockets)broadcast(uid,payload);}else{const valid=await db.execute({sql:`SELECT uid FROM users WHERE uid IN (${targets.map(()=>'?').join(',')})`,args:targets});for(const row of valid.rows)broadcast(row.uid,payload);}
     res.json({ok:true,announcement:a,targetMode,targetCount:targetMode==='all'?null:targets.length});
-  }catch(e){if(req.file)fs.unlink(req.file.path,()=>{});console.error(e);res.status(500).json({error:'Announcement failed'});}
+  }catch(e){console.error(e);res.status(500).json({error:'Announcement failed'});}
 });
 
 app.get('/api/notifications/unread',auth,async(req,res)=>{

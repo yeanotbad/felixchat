@@ -53,3 +53,13 @@ For a public production deployment, replace the simple SHA-256 password hashing 
 
 ## Mobile UI
 The interface is responsive and uses the full phone screen on mobile devices. Desktop remains the normal chat layout; no phone-frame effect is used.
+
+
+## Persistent media storage (Cloudinary)
+
+Set these Render environment variables so profile pictures, stories, chat media, and announcement media survive Render restarts/redeploys:
+
+- `CLOUDINARY_CLOUD_NAME` — your Cloudinary cloud name
+- `CLOUDINARY_UPLOAD_PRESET` — an **Unsigned** Cloudinary upload preset (for example `felixchat`)
+
+The browser uploads media directly to Cloudinary. Turso stores the returned permanent Cloudinary URL. Never put your Cloudinary API secret in the frontend.
