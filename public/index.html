@@ -345,6 +345,20 @@ max-width:90%;
   .message{max-width:88%;font-size:15px}
   .message-media,.message-video{max-width:78vw;max-height:45vh}
 }
+
+/* Added moderation, quick-add, request toasts and friend controls */
+.friend-actions{display:flex;gap:6px;margin-left:auto}
+.friend-menu-btn{background:#151e33;border:1px solid #2c3854;color:#fff;border-radius:10px;padding:8px 10px;cursor:pointer}
+.quick-add-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.quick-user{display:flex;align-items:center;gap:8px;padding:10px;background:#151e32;border:1px solid #2c3854;border-radius:12px}
+.quick-user .btn{width:auto;min-height:34px;padding:7px 10px}
+.role-badge{font-size:10px;padding:3px 7px;border-radius:999px;background:#25324b;color:#b9c5dd;margin-left:5px}
+.request-toast-stack{position:fixed;left:18px;bottom:18px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 36px))}
+.request-toast{background:#10182a;border:1px solid #394a6d;box-shadow:0 15px 40px #0008;border-radius:14px;padding:12px 14px;color:#fff}
+.request-toast .small{margin-bottom:8px}
+.request-toast-actions{display:flex;gap:7px}
+.request-toast-actions button{flex:1}
+@media(max-width:600px){.quick-add-grid{grid-template-columns:1fr}.request-toast-stack{left:10px;right:10px;bottom:10px;max-width:none}}
 </style>
 
 
@@ -1325,6 +1339,8 @@ class="friends"
 <button class="btn" onclick="searchUsers()">🔎 Find People</button>
 <button class="btn" onclick="editProfile()">👤 Profile</button>
 <button id="adminBtn" class="btn" style="display:none" onclick="openAdminPanel()">🛡️ Admin</button>
+<button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">🛡️ Mod Tools</button>
+<button class="btn" onclick="openQuickAdd()">⚡ Quick Add</button>
 </div>
 <label class="snap-toggle"><input id="disappearingToggle" type="checkbox"> Disappearing messages (24h)</label>
 <div class="snap-search"><input id="quickSearch" class="input" placeholder="Search users..." onkeydown="if(event.key==='Enter')searchUsers()"></div>
@@ -1375,7 +1391,7 @@ Choose a friend
 </div>
 
 </div>
-<div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call">📞 <span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime">📹 <span>FaceTime</span></button></div>
+<div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call">📞 <span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime">📹 <span>FaceTime</span></button></div><div class="friend-actions"><button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button></div>
 </header>
 
 <section id="storyStrip" class="story-strip"></section>
@@ -2233,226 +2249,6 @@ sendMessage();
 });
 
 
-
-/* REAL CALLING — WebRTC + the existing WebSocket signaling channel */
-let callPC=null;
-let callLocalStream=null;
-let callRemoteStream=null;
-let callPeer=null;
-let callRole=null;
-let callMode='audio';
-let incomingCall=null;
-let pendingIceCandidates=[];
-
-function showCallOverlay(title,sub){
-  $("callTitle").textContent=title||"Call";
-  $("callSub").textContent=sub||"";
-  $("callOverlay").style.display="flex";
-}
-function hideCallOverlay(){
-  $("callOverlay").style.display="none";
-  $("incomingActions").style.display="none";
-}
-function stopCallTracks(){
-  if(callLocalStream) callLocalStream.getTracks().forEach(t=>t.stop());
-  if(callRemoteStream) callRemoteStream.getTracks().forEach(t=>t.stop());
-  callLocalStream=null;
-  callRemoteStream=null;
-  $("localVideo").srcObject=null;
-  $("remoteVideo").srcObject=null;
-}
-function closeCallPeer(){
-  try{callPC?.close()}catch{}
-  callPC=null;
-  pendingIceCandidates=[];
-}
-function resetCallUI(){
-  stopCallTracks();
-  closeCallPeer();
-  callPeer=null;
-  callRole=null;
-  incomingCall=null;
-  $("remoteVideo").style.display="none";
-  $("localVideo").style.display="none";
-  $("callAudioIcon").style.display="block";
-  $("callControls").style.display="flex";
-  hideCallOverlay();
-}
-function sendCall(type,to,payload=null,callType=callMode){
-  if(!socket || socket.readyState!==WebSocket.OPEN) throw new Error("Realtime connection is not ready. Please wait a moment and try again.");
-  socket.send(JSON.stringify({type,to,payload,callType}));
-}
-function attachCallPeerEvents(){
-  callPC.onicecandidate=e=>{
-    if(e.candidate && callPeer){
-      sendCall("call_signal",callPeer,{kind:"candidate",candidate:e.candidate},callMode);
-    }
-  };
-  callPC.ontrack=e=>{
-    callRemoteStream=e.streams[0]||callRemoteStream;
-    if(callRemoteStream){
-      $("remoteVideo").srcObject=callRemoteStream;
-      $("remoteVideo").style.display=callMode==="video"?"block":"none";
-      $("callAudioIcon").style.display=callMode==="video"?"none":"block";
-    }
-  };
-  callPC.onconnectionstatechange=()=>{
-    if(!callPC)return;
-    const state=callPC.connectionState;
-    if(state==="connected"){
-      $("callSub").textContent=callMode==="video"?"Video call connected":"Call connected";
-    }else if(["failed","disconnected","closed"].includes(state) && callRole){
-      $("callSub").textContent="Call disconnected";
-      setTimeout(()=>{if(callRole) resetCallUI()},900);
-    }
-  };
-}
-async function makeCallPeer(){
-  callPC=new RTCPeerConnection({
-    iceServers:[
-      {urls:"stun:stun.l.google.com:19302"},
-      {urls:"stun:stun1.l.google.com:19302"}
-    ]
-  });
-  attachCallPeerEvents();
-  callLocalStream=await navigator.mediaDevices.getUserMedia(
-    callMode==="video"?{audio:true,video:true}:{audio:true,video:false}
-  );
-  callLocalStream.getTracks().forEach(track=>callPC.addTrack(track,callLocalStream));
-  $("localVideo").srcObject=callLocalStream;
-  $("localVideo").style.display=callMode==="video"?"block":"none";
-}
-async function startCall(mode){
-  if(!activeFriend)return;
-  if(!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection){
-    alert("Calling is not supported by this browser.");
-    return;
-  }
-  if(!activeFriend.online){
-    alert("This friend is offline. They need to be online to receive the call.");
-    return;
-  }
-  if(callPC || incomingCall){
-    alert("You are already in a call.");
-    return;
-  }
-  callMode=mode==="video"?"video":"audio";
-  callPeer=activeFriend.uid;
-  callRole="caller";
-  showCallOverlay(callMode==="video"?"📹 Calling @"+activeFriend.username:"📞 Calling @"+activeFriend.username,"Requesting microphone"+(callMode==="video"?" and camera":"")+"…");
-  try{
-    await makeCallPeer();
-    const offer=await callPC.createOffer();
-    await callPC.setLocalDescription(offer);
-    sendCall("call_invite",callPeer,{offer:callPC.localDescription},callMode);
-    $("callSub").textContent="Ringing…";
-  }catch(e){
-    console.error(e);
-    alert("Could not start the call. Check your microphone/camera permissions.");
-    resetCallUI();
-  }
-}
-async function handleIncomingCall(msg){
-  if(callPC || incomingCall){
-    try{sendCall("call_reject",msg.from,null,msg.callType||"audio")}catch{}
-    return;
-  }
-  incomingCall=msg;
-  callPeer=msg.from;
-  callMode=msg.callType==="video"?"video":"audio";
-  callRole="receiver";
-  const friend=(me?.friends||[]).find(f=>f.uid===msg.from);
-  const name=friend?.username||"Friend";
-  showCallOverlay(callMode==="video"?"📹 Incoming video call":"📞 Incoming call","@"+name+" is calling you");
-  $("incomingActions").style.display="flex";
-  $("callControls").style.display="none";
-  $("callAudioIcon").textContent=callMode==="video"?"📹":"📞";
-}
-async function acceptIncomingCall(){
-  if(!incomingCall)return;
-  try{
-    $("incomingActions").style.display="none";
-    $("callControls").style.display="flex";
-    $("callSub").textContent="Connecting…";
-    await makeCallPeer();
-    const offer=incomingCall.payload?.offer;
-    if(!offer)throw new Error("Missing call offer");
-    await callPC.setRemoteDescription(new RTCSessionDescription(offer));
-    for(const c of pendingIceCandidates.splice(0)){
-      try{await callPC.addIceCandidate(c)}catch{}
-    }
-    const answer=await callPC.createAnswer();
-    await callPC.setLocalDescription(answer);
-    sendCall("call_accept",callPeer,{answer:callPC.localDescription},callMode);
-    incomingCall=null;
-  }catch(e){
-    console.error(e);
-    alert("Could not accept the call. Check your microphone/camera permissions.");
-    try{sendCall("call_reject",callPeer,null,callMode)}catch{}
-    resetCallUI();
-  }
-}
-function rejectIncomingCall(){
-  if(callPeer){
-    try{sendCall("call_reject",callPeer,null,callMode)}catch{}
-  }
-  resetCallUI();
-}
-function endCall(){
-  if(callPeer){
-    try{sendCall("call_end",callPeer,null,callMode)}catch{}
-  }
-  resetCallUI();
-}
-async function handleCallSignal(msg){
-  if(!callPC || msg.from!==callPeer)return;
-  const p=msg.payload||{};
-  try{
-    if(p.kind==="answer" && callRole==="caller"){
-      await callPC.setRemoteDescription(new RTCSessionDescription(p.description||p.answer));
-      for(const c of pendingIceCandidates.splice(0)){
-        try{await callPC.addIceCandidate(c)}catch{}
-      }
-    }else if(p.kind==="candidate" && p.candidate){
-      if(callPC.remoteDescription && callPC.remoteDescription.type){
-        await callPC.addIceCandidate(new RTCIceCandidate(p.candidate));
-      }else{
-        pendingIceCandidates.push(new RTCIceCandidate(p.candidate));
-      }
-    }
-  }catch(e){console.error("Call signaling error",e);}
-}
-function handleCallMessage(message){
-  if(message.type==="call_invite"){handleIncomingCall(message);return;}
-  if(message.type==="call_accept"){
-    if(callRole==="caller" && callPC && message.payload?.answer){
-      $("callSub").textContent="Connecting…";
-      callPC.setRemoteDescription(new RTCSessionDescription(message.payload.answer))
-        .then(async()=>{
-          for(const c of pendingIceCandidates.splice(0)){
-            try{await callPC.addIceCandidate(c)}catch{}
-          }
-        })
-        .catch(e=>{console.error("Call answer error",e);resetCallUI();});
-    }
-    return;
-  }
-  if(message.type==="call_reject"){
-    if(callRole){
-      $("callSub").textContent="Call declined";
-      setTimeout(resetCallUI,700);
-    }
-    return;
-  }
-  if(message.type==="call_signal"){handleCallSignal(message);return;}
-  if(message.type==="call_end"){
-    if(callRole){
-      $("callSub").textContent="Call ended";
-      setTimeout(resetCallUI,500);
-    }
-  }
-}
-
 /* REAL TIME */
 
 function connectSocket(){
@@ -2495,24 +2291,12 @@ event => {
 const message =
 JSON.parse(event.data);
 
-if(["call_invite","call_accept","call_reject","call_signal","call_end"].includes(message.type)){
-  handleCallMessage(message);
-  return;
+if(message.type === "friend_request"){
+  showFriendRequestToast(message.from||'Someone',message.uid||'');
+  loadUser();
 }
 
-if(
-message.type ===
-"friend_request"
-){
-
-loadUser();
-
-}
-
-if(
-message.type ===
-"friend_accepted"
-){
+if(message.type === "friend_accepted"){
 
 loadUser();
 
@@ -2551,13 +2335,6 @@ connectSocket();
 
 }
 
-
-window.addEventListener("beforeunload",()=>{
-  if(callPeer && socket?.readyState===WebSocket.OPEN){
-    try{sendCall("call_end",callPeer,null,callMode)}catch{}
-  }
-  resetCallUI();
-});
 
 /* LOG OUT */
 
@@ -2615,18 +2392,25 @@ async function showMyStories(){
 }
 async function deleteStory(id){if(!confirm('Delete this story?'))return;try{await api('/stories/'+id,{method:'DELETE'});await showStories();showMyStories()}catch(e){alert(e.message)}}
 function syncAdminButton(){
-  const btn=$('adminBtn');
-  if(!btn) return;
-  const isAdmin=!!me && String(me.username||'').toLowerCase()==='felixchat';
-  btn.style.display=isAdmin?'block':'none';
-  btn.disabled=!isAdmin;
+  const admin=$('adminBtn'), mod=$('modBtn');
+  if(!admin||!mod)return;
+  const role=String(me?.role||'member').toLowerCase();
+  admin.style.display=(role==='admin' && String(me?.username||'').toLowerCase()==='felixchat')?'block':'none';
+  mod.style.display=(role==='admin'||role==='mod')?'block':'none';
 }
 async function openAdminPanel(){
-  if(!me || String(me.username||'').toLowerCase()!=='felixchat'){ alert('Admin access required'); return; }
+  if(!me || String(me.username||'').toLowerCase()!=='felixchat' || me.role!=='admin'){alert('Only @felixchat can use the admin panel.');return;}
   try{
     const status=await api('/admin/status');
-    if(!status.admin){syncAdminButton();return alert('Admin access required');}
-    openModal(`<h2>🛡️ FelixChat Admin</h2><p class="small">Ban or unban accounts. Only @felixchat can use this.</p><div class="row"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" style="margin-top:12px">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:10px">Done</button>`);
+    if(!status.admin)return alert('Admin access required');
+    openModal(`<h2>🛡️ FelixChat Admin</h2><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="row"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" style="margin-top:12px">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:10px">Done</button>`);
+    await refreshAdminUsers();
+  }catch(e){alert(e.message)}
+}
+async function openModPanel(){
+  if(!['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
+  try{
+    openModal(`<h2>🛡️ Moderator Tools</h2><p class="small">Moderators can ban/unban accounts. Only @felixchat can grant powers.</p><div class="row"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" style="margin-top:12px">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:10px">Done</button>`);
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
 }
@@ -2636,8 +2420,19 @@ async function refreshAdminUsers(){
     const q=($('adminUserSearch')?.value||'').trim();
     const users=await api('/admin/users?q='+encodeURIComponent(q));
     if(!users.length){box.innerHTML='<p class="small">No users found.</p>';return;}
-    box.innerHTML=users.map(u=>`<div class="request"><div class="avatar">${initials(u.username)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)}</div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${u.username==='felixchat'?'':u.banned?`<button class="btn primary" onclick="adminUnban('${u.uid}')">Unban</button>`:`<button class="btn" onclick="adminBan('${u.uid}','${escapeHtml(u.username)}')">Ban</button>`}</div>`).join('');
+    const canGrant=String(me?.username||'').toLowerCase()==='felixchat' && me?.role==='admin';
+    box.innerHTML=users.map(u=>{
+      const role=(u.role||'member').toLowerCase();
+      const roleLabel=role==='mod'?'🛡️ MOD':role==='vip'?'⭐ VIP':'Member';
+      const banButton=u.username==='felixchat'?'':(u.banned?`<button class="btn primary" onclick="adminUnban('${u.uid}')">Unban</button>`:`<button class="btn" onclick="adminBan('${u.uid}','${escapeHtml(u.username)}')">Ban</button>`);
+      const roleButton=canGrant && u.username!=='felixchat'?`<select class="input" style="width:auto;padding:7px" onchange="adminSetRole('${u.uid}',this.value)"><option value="member" ${role==='member'?'selected':''}>Member</option><option value="vip" ${role==='vip'?'selected':''}>VIP</option><option value="mod" ${role==='mod'?'selected':''}>Moderator</option></select>`:'';
+      return `<div class="request"><div class="avatar">${avatarMarkup(u)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)} <span class="role-badge">${roleLabel}</span></div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${roleButton}${banButton}</div>`;
+    }).join('');
   }catch(e){box.innerHTML='<p class="small">'+escapeHtml(e.message)+'</p>';}
+}
+async function adminSetRole(uid,role){
+  if(!confirm('Change this account to '+role+'?')){await refreshAdminUsers();return}
+  try{await api('/admin/role/'+uid,{method:'POST',body:JSON.stringify({role})});await refreshAdminUsers();await loadUser()}catch(e){alert(e.message);await refreshAdminUsers()}
 }
 async function adminBan(uid,username){
   if(!confirm('Ban @'+username+'? They will be logged out immediately.'))return;
@@ -2649,12 +2444,221 @@ async function adminUnban(uid){
 
 async function searchUsers(){const q=($('quickSearch')?.value||'').trim();if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));let html='<h2>🔎 People</h2>';if(!users.length)html+='<p>No users found.</p>';users.forEach(u=>{html+=`<div class="request"><div class="avatar">${initials(u.username)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)}</div></b><button class="btn primary" onclick="sendFoundFriend('${u.username}')">Add</button></div>`});html+='<button class="btn" onclick="closeModal()">Done</button>';openModal(html)}catch(e){alert(e.message)}}
 async function sendFoundFriend(username){try{await api('/friends/request',{method:'POST',body:JSON.stringify({username})});alert('Friend request sent!')}catch(e){alert(e.message)}}
-function editProfile(){openModal(`<h2>👤 Edit profile</h2><div class="profile-upload"><div id="profilePreview" class="avatar">${avatarMarkup(me)}</div><div style="flex:1"><b>Profile picture</b><input id="profileAvatarFile" type="file" accept="image/*" class="input" style="margin-top:6px" onchange="previewProfileImage(event)"></div></div><br><input id="profileDisplay" class="input" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProfile()">Save</button></div>`)}
+function editProfile(){openModal(`<h2>👤 Edit profile</h2><div class="profile-upload"><div id="profilePreview" class="avatar">${avatarMarkup(me)}</div><div style="flex:1"><b>Profile picture</b><input id="profileAvatarFile" type="file" accept="image/*" class="input" style="margin-top:6px" onchange="previewProfileImage(event)"><div class="small" style="margin-top:5px">Choose a picture from your computer. It is stored permanently in Turso.</div></div></div><br><input id="profileDisplay" class="input" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProfile()">Save</button></div>`)}
 function previewProfileImage(event){const f=event.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('profilePreview').innerHTML=`<img src="${r.result}" alt="">`};r.readAsDataURL(f)}
-async function saveProfile(){try{const file=$('profileAvatarFile')?.files?.[0];if(file){if(!file.type.startsWith('image/'))throw new Error('Choose an image file.');if(file.size>10*1024*1024)throw new Error('Profile pictures must be 10 MB or smaller.');const form=new FormData();form.append('file',file);const r=await fetch(API+'/profile/avatar',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Profile picture upload failed')}await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value})});closeModal();await loadUser()}catch(e){alert(e.message)}}
-setInterval(()=>{if(me && String(me.username||'').toLowerCase()==='felixchat')syncAdminButton()},1500);
+async function saveProfile(){
+  try{
+    const file=$('profileAvatarFile')?.files?.[0];
+    if(file){
+      if(!file.type.startsWith('image/'))throw new Error('Choose an image file.');
+      if(file.size>10*1024*1024)throw new Error('Profile pictures must be 10 MB or smaller.');
+      const form=new FormData();form.append('file',file);
+      const r=await fetch(API+'/profile/avatar',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
+      const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Profile picture upload failed');
+    }
+    // Do not send an empty avatar here; the server deliberately preserves the stored picture.
+    await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value})});
+    closeModal();await loadUser();
+  }catch(e){alert(e.message)}
+}
+function openQuickAdd(){
+  openModal(`<h2>⚡ Quick Add</h2><p class="small">10 people you can quickly add as friends.</p><div id="quickAddList">Loading...</div><button class="btn" onclick="closeModal()" style="margin-top:10px">Done</button>`);
+  loadQuickAdd();
+}
+async function loadQuickAdd(){
+  const box=$('quickAddList');if(!box)return;
+  try{
+    const users=await api('/quick-add');
+    if(!users.length){box.innerHTML='<p class="small">No new people to suggest right now.</p>';return}
+    box.innerHTML='<div class="quick-add-grid">'+users.slice(0,10).map(u=>`<div class="quick-user"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1;min-width:0"><b>@${escapeHtml(u.username)}</b><div class="small">${escapeHtml(u.displayName||u.username)}</div></div><button class="btn primary" onclick="quickAddFriend('${escapeHtml(u.username)}',this)">Add</button></div>`).join('')+'</div>';
+  }catch(e){box.innerHTML='<p class="small">'+escapeHtml(e.message)+'</p>'}
+}
+async function quickAddFriend(username,button){
+  try{await api('/friends/request',{method:'POST',body:JSON.stringify({username})});button.disabled=true;button.textContent='Sent ✓';button.classList.remove('primary')}catch(e){alert(e.message)}
+}
+async function openFriendOptions(){
+  if(!activeFriend)return;
+  const blockedState=false;
+  openModal(`<h2>👥 @${escapeHtml(activeFriend.username)}</h2><p class="small">Manage this connection.</p><button class="btn" onclick="removeFriend('${activeFriend.uid}')">🗑️ Remove Friend</button><button class="btn" style="margin-top:8px" onclick="blockFriend('${activeFriend.uid}')">🚫 Block</button><button class="btn" style="margin-top:8px" onclick="closeModal()">Cancel</button>`);
+}
+async function removeFriend(uid){
+  if(!confirm('Remove this friend?'))return;
+  try{await api('/friends/'+uid,{method:'DELETE'});activeFriend=null;closeModal();await loadUser();$('friendName').textContent='Felix Chat';$('friendStatus').textContent='Choose a friend';$('callActions').style.display='none';$('messages').innerHTML='<div class="empty">Choose a friend to start chatting.</div>'}catch(e){alert(e.message)}
+}
+async function blockFriend(uid){
+  if(!confirm('Block this user? They will also be removed from your friends.'))return;
+  try{await api('/block/'+uid,{method:'POST'});await api('/friends/'+uid,{method:'DELETE'}).catch(()=>{});activeFriend=null;closeModal();await loadUser();$('callActions').style.display='none'}catch(e){alert(e.message)}
+}
+function showFriendRequestToast(username,uid){
+  const stack=$('requestToastStack');if(!stack)return;
+  const el=document.createElement('div');el.className='request-toast';
+  el.innerHTML=`<b>👋 ${escapeHtml(username)}</b><div class="small">@${escapeHtml(username)} has sent you a friend request.</div><div class="request-toast-actions"><button class="btn primary">Accept</button><button class="btn">Decline</button></div>`;
+  const buttons=el.querySelectorAll('button');
+  buttons[0].onclick=async()=>{try{await acceptRequest(uid);el.remove()}catch(e){alert(e.message)}};
+  buttons[1].onclick=async()=>{try{await declineRequest(uid);el.remove()}catch(e){alert(e.message)}};
+  stack.appendChild(el);
+  setTimeout(()=>el.remove(),15000);
+}
+
+setInterval(()=>{if(me)syncAdminButton()},1500);
 </script>
+<div id="requestToastStack" class="request-toast-stack"></div>
 <div id="callOverlay" class="call-overlay"><div class="call-card"><div><div id="callTitle" class="call-title">Call</div><div id="callSub" class="call-sub">Connecting…</div></div><div class="call-video-stage"><div id="callAudioIcon" class="call-audio-icon">📞</div><video id="remoteVideo" autoplay playsinline style="display:none"></video><video id="localVideo" autoplay muted playsinline></video></div><div id="incomingActions" class="incoming-actions" style="display:none"><button class="call-control" onclick="acceptIncomingCall()">✅ Accept</button><button class="call-control end" onclick="rejectIncomingCall()">✕ Decline</button></div><div id="callControls" class="call-controls"><button class="call-control end" onclick="endCall()">📞 End</button></div></div></div>
+
+<script>
+/* REAL WEBRTC CALLING — uses the existing authenticated WebSocket for signaling. */
+let callPC=null,callStream=null,callRemoteStream=null,callMode='audio',callId=null,callPeer=null,callIncomingOffer=null,callState='idle';
+
+function sendCallSignal(type,payload){
+  if(!socket || socket.readyState!==WebSocket.OPEN || !callPeer)return;
+  socket.send(JSON.stringify({type,to:callPeer,callType:callMode,payload:payload||null}));
+}
+function showCallOverlay(title,sub,incoming=false){
+  $('callOverlay').style.display='flex';
+  $('callTitle').textContent=title;
+  $('callSub').textContent=sub;
+  $('incomingActions').style.display=incoming?'flex':'none';
+  $('callControls').style.display=incoming?'none':'flex';
+  $('callAudioIcon').style.display=callMode==='audio'?'flex':'none';
+  $('remoteVideo').style.display=callMode==='video'?'block':'none';
+  $('localVideo').style.display=callMode==='video'?'block':'none';
+}
+async function startCall(mode){
+  if(!activeFriend)return alert('Choose a friend first.');
+  if(callState!=='idle')return alert('You are already in a call.');
+  if(!navigator.mediaDevices?.getUserMedia)return alert('Calling requires a secure HTTPS connection and a supported browser.');
+  callMode=mode;callPeer=activeFriend.uid;callId=Math.random().toString(36).slice(2);callState='outgoing';
+  try{
+    callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:mode==='video'});
+    $('localVideo').srcObject=callStream;
+    showCallOverlay(mode==='video'?'📹 Video call':'📞 Voice call','Calling @'+activeFriend.username+'…');
+    sendCallSignal('call_invite',{callId});
+    await createCallPeer();
+    const offer=await callPC.createOffer();
+    await callPC.setLocalDescription(offer);
+    sendCallSignal('call_signal',{kind:'offer',callId,sdp:offer});
+  }catch(e){cleanupCall();alert('Microphone/camera permission was denied or unavailable.')}
+}
+async function createCallPeer(){
+  if(callPC)callPC.close();
+  callPC=new RTCPeerConnection({
+    iceServers:[
+      {urls:'stun:stun.l.google.com:19302'},
+      {urls:'stun:stun1.l.google.com:19302'}
+    ]
+  });
+  callRemoteStream=new MediaStream();
+  $('remoteVideo').srcObject=callRemoteStream;
+  callPC.ontrack=e=>{e.streams[0]?.getTracks().forEach(t=>callRemoteStream.addTrack(t));};
+  callPC.onicecandidate=e=>{if(e.candidate)sendCallSignal('call_signal',{kind:'ice',candidate:e.candidate});};
+  callPC.onconnectionstatechange=()=>{
+    if(['connected','completed'].includes(callPC.connectionState)){
+      $('callSub').textContent='Connected';
+      callState='connected';
+    }else if(['failed','disconnected','closed'].includes(callPC.connectionState) && callState!=='idle'){
+      cleanupCall();
+    }
+  };
+  if(callStream)callStream.getTracks().forEach(t=>callPC.addTrack(t,callStream));
+}
+async function acceptIncomingCall(){
+  if(!callIncomingOffer)return;
+  try{
+    callState='incoming';
+    callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:callMode==='video'});
+    $('localVideo').srcObject=callStream;
+    await createCallPeer();
+    await callPC.setRemoteDescription(new RTCSessionDescription(callIncomingOffer.sdp));
+    const answer=await callPC.createAnswer();
+    await callPC.setLocalDescription(answer);
+    sendCallSignal('call_accept',{callId:callIncomingOffer.callId,sdp:answer});
+    showCallOverlay(callMode==='video'?'📹 Video call':'📞 Voice call','Connecting…');
+    callIncomingOffer=null;
+  }catch(e){sendCallSignal('call_reject',{});cleanupCall();alert('Could not access your microphone/camera.')}
+}
+function rejectIncomingCall(){
+  sendCallSignal('call_reject',{});
+  cleanupCall();
+}
+async function endCall(){
+  if(callState!=='idle')sendCallSignal('call_end',{});
+  cleanupCall();
+}
+function cleanupCall(){
+  try{callPC?.close()}catch{}
+  callPC=null;
+  callStream?.getTracks().forEach(t=>t.stop());
+  callStream=null;
+  callRemoteStream=null;
+  callIncomingOffer=null;
+  callPeer=null;
+  callId=null;
+  callState='idle';
+  if($('localVideo'))$('localVideo').srcObject=null;
+  if($('remoteVideo'))$('remoteVideo').srcObject=null;
+  if($('callOverlay'))$('callOverlay').style.display='none';
+}
+function handleCallMessage(m){
+  if(!m||!m.from)return;
+  if(m.type==='call_invite'){
+    if(callState!=='idle'){
+      if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'call_reject',to:m.from,callType:m.callType||'audio',payload:{busy:true}}));
+      return;
+    }
+    callPeer=m.from;callId=m.payload?.callId||null;callMode=m.callType==='video'?'video':'audio';callState='incoming';
+    callIncomingOffer=null;
+    // The caller sends the actual offer as call_signal shortly after the invite.
+    showCallOverlay(callMode==='video'?'📹 Incoming video call':'📞 Incoming call','@'+(activeFriend?.username||'Someone')+' is calling…',true);
+    return;
+  }
+  if(m.type==='call_signal'){
+    const p=m.payload||{};
+    if(p.kind==='offer'){
+      callPeer=m.from;callId=p.callId||callId;callMode=m.callType==='video'?'video':callMode;
+      if(callState==='idle'){callState='incoming';showCallOverlay(callMode==='video'?'📹 Incoming video call':'📞 Incoming call','Incoming call…',true);}
+      callIncomingOffer={callId:callId,sdp:p.sdp};
+      return;
+    }
+    if(p.kind==='ice' && callPC && p.candidate){
+      callPC.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(()=>{});
+    }
+    return;
+  }
+  if(m.type==='call_accept'){
+    if(callState!=='outgoing')return;
+    (async()=>{
+      try{
+        await createCallPeer();
+        await callPC.setRemoteDescription(new RTCSessionDescription(m.payload.sdp));
+        $('callSub').textContent='Connected';
+        callState='connected';
+      }catch(e){cleanupCall();alert('Call connection failed.')}
+    })();
+    return;
+  }
+  if(m.type==='call_reject'){
+    cleanupCall();alert(m.payload?.busy?'The user is already on another call.':'Call declined.');
+    return;
+  }
+  if(m.type==='call_end'){
+    cleanupCall();
+    return;
+  }
+}
+/* Override the existing socket message handler by wrapping it once. */
+const originalConnectSocket=connectSocket;
+connectSocket=function(){
+  originalConnectSocket();
+  if(socket){
+    const oldOnMessage=socket.onmessage;
+    socket.onmessage=function(event){
+      try{const m=JSON.parse(event.data);handleCallMessage(m)}catch{}
+      if(oldOnMessage)oldOnMessage.call(this,event);
+    };
+  }
+};
+</script>
+
 </body>
 
 </html>
