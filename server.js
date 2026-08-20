@@ -164,6 +164,21 @@ app.patch('/api/profile',auth,async(req,res)=>{
 });
 
 // Profile pictures are stored as permanent Cloudinary URLs in Turso.
+app.get('/api/quick-add',auth,async(req,res)=>{
+  try{
+    const r=await db.execute({sql:`
+      SELECT u.* FROM users u
+      WHERE u.uid<>?
+        AND COALESCE(u.banned,0)=0
+        AND NOT EXISTS (SELECT 1 FROM friendships f WHERE f.user_id=? AND f.friend_id=u.uid AND f.status IN ('accepted','pending'))
+        AND NOT EXISTS (SELECT 1 FROM friendships f WHERE f.user_id=u.uid AND f.friend_id=? AND f.status IN ('accepted','pending'))
+        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.uid=? AND b.blocked_uid=u.uid)
+        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.uid=u.uid AND b.blocked_uid=?)
+      ORDER BY RANDOM() LIMIT 10`,args:[req.uid,req.uid,req.uid,req.uid,req.uid]});
+    res.json(r.rows.map(u=>publicUser(u,(sockets.get(u.uid)?.size||0)>0)));
+  }catch(e){console.error('quick-add',e);res.status(500).json({error:'Could not load Quick Add users'});}
+});
+
 app.get('/api/users/search',auth,async(req,res)=>{
   const q=String(req.query.q||'').trim().toLowerCase();
   const r=await db.execute({sql:`SELECT * FROM users WHERE lower(username) LIKE ? OR lower(COALESCE(display_name,'')) LIKE ? ORDER BY username LIMIT 30`,args:[`%${q}%`,`%${q}%`]});
