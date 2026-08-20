@@ -39,9 +39,12 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS story_views (story_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(story_id, uid))`,
     `CREATE TABLE IF NOT EXISTS blocks (uid TEXT NOT NULL, blocked_uid TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(uid, blocked_uid))`,
     `CREATE TABLE IF NOT EXISTS groups (gid TEXT PRIMARY KEY, name TEXT NOT NULL, owner_id TEXT NOT NULL, created_at INTEGER NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS group_members (gid TEXT NOT NULL, uid TEXT NOT NULL, joined_at INTEGER NOT NULL, PRIMARY KEY(gid, uid))`
+    `CREATE TABLE IF NOT EXISTS group_members (gid TEXT NOT NULL, uid TEXT NOT NULL, joined_at INTEGER NOT NULL, PRIMARY KEY(gid, uid))`,
+    `CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, sender_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', audience TEXT DEFAULT 'all', targets_json TEXT DEFAULT '[]', created_at INTEGER NOT NULL)`
   ], 'write');
   for (const sql of [
+    `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
+    `ALTER TABLE announcements ADD COLUMN targets_json TEXT DEFAULT '[]'`,
     `ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'member'`,
     `ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN banned_at INTEGER`,
@@ -309,6 +312,57 @@ app.post('/api/admin/command',auth,async(req,res)=>{
   res.json({ok:true,action:'unban',username:target.username});
 });
 
+
+// Announcements: owners and moderators can send a full-screen announcement
+// either to everybody or to a selected list of accounts.
+app.get('/api/announcements/recent',auth,async(req,res)=>{
+  const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});
+  const out=[];
+  for(const a of r.rows){
+    let targets=[];try{targets=JSON.parse(a.targets_json||'[]');}catch{}
+    if(a.audience==='all'||targets.includes(req.uid)){
+      out.push({id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username});
+    }
+  }
+  res.json(out.slice(0,3));
+});
+
+app.get('/api/announcement/users',auth,async(req,res)=>{
+  if(!await requireModerator(req,res))return;
+  const q=clean(req.query.q||'').toLowerCase();
+  const r=await db.execute({sql:`SELECT uid,username,display_name,avatar,role FROM users WHERE username LIKE ? OR display_name LIKE ? ORDER BY username LIMIT 100`,args:[`%${q}%`,`%${q}%`]});
+  res.json(r.rows.map(u=>({uid:u.uid,username:u.username,displayName:u.display_name||u.username,avatar:u.avatar||'',role:u.role||'member'})));
+});
+app.post('/api/announcements',auth,upload.single('file'),async(req,res)=>{
+  if(!await requireModerator(req,res)){if(req.file)fs.unlink(req.file.path,()=>{});return;}
+  try{
+    const text=String(req.body.text||'').trim().slice(0,5000);
+    const targetMode=String(req.body.targetMode||'all').toLowerCase();
+    let targets=[];
+    if(targetMode==='selected'){
+      try{targets=JSON.parse(String(req.body.targets||'[]'));}catch{targets=[];}
+      targets=[...new Set(targets.map(x=>String(x)).filter(Boolean))];
+      if(!targets.length){if(req.file)fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Select at least one person.'});}
+    }else if(targetMode!=='all'){
+      if(req.file)fs.unlink(req.file.path,()=>{});return res.status(400).json({error:'Invalid announcement audience.'});
+    }
+    if(!text && !req.file){return res.status(400).json({error:'Add text or attach an image, video, or audio file.'});}
+    let kind='text',url='',name='',mime='';
+    if(req.file){mime=req.file.mimetype||'application/octet-stream';kind=mime.startsWith('image/')?'image':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file';url='/uploads/'+path.basename(req.file.path);name=String(req.file.originalname||'announcement').slice(0,120);}
+    const a={id:id(),senderId:req.uid,text,kind,url,name,mime,time:now()};
+    await db.execute({sql:'INSERT INTO announcements(id,sender_id,text,kind,url,name,mime,audience,targets_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',args:[a.id,a.senderId,a.text,a.kind,a.url,a.name,a.mime,targetMode,JSON.stringify(targets),a.time]});
+    const sender=await getUser(req.uid);
+    const payload={type:'announcement',announcement:{...a,senderUsername:sender?.username||'Moderator',senderDisplayName:sender?.display_name||sender?.username||'Moderator'}};
+    if(targetMode==='all'){
+      for(const [uid] of sockets)broadcast(uid,payload);
+    }else{
+      const valid=await db.execute({sql:`SELECT uid FROM users WHERE uid IN (${targets.map(()=>'?').join(',')})`,args:targets});
+      for(const row of valid.rows)broadcast(row.uid,payload);
+    }
+    res.json({ok:true,announcement:a,targetMode,targetCount:targetMode==='all'?null:targets.length});
+  }catch(e){if(req.file)fs.unlink(req.file.path,()=>{});console.error(e);res.status(500).json({error:'Announcement failed'});}
+});
+
 app.get('/api/notifications/unread',auth,async(req,res)=>{
   const r=await db.execute({sql:`SELECT m.id,m.sender_id,m.text,m.kind,m.created_at,u.username,u.display_name FROM messages m JOIN users u ON u.uid=m.sender_id WHERE m.receiver_id=? AND m.read_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>?) ORDER BY m.created_at DESC LIMIT 50`,args:[req.uid,now()]});
   res.json(r.rows.map(m=>({id:m.id,uid:m.sender_id,username:m.username,displayName:m.display_name||m.username,text:m.text||'',kind:m.kind,time:m.created_at})));
@@ -319,7 +373,9 @@ app.post('/api/groups',auth,async(req,res)=>{const name=String(req.body.name||'N
 app.get('/api/groups',auth,async(req,res)=>{const r=await db.execute({sql:`SELECT g.* FROM groups g JOIN group_members m ON m.gid=g.gid WHERE m.uid=? ORDER BY g.created_at DESC`,args:[req.uid]});res.json(r.rows);});
 app.post('/api/groups/:gid/members',auth,async(req,res)=>{const other=req.body.uid;const member=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[req.params.gid,req.uid]});if(!member.rows.length)return res.status(403).json({error:'Not a group member'});await db.execute({sql:'INSERT OR IGNORE INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[req.params.gid,other,now()]});res.json({ok:true});});
 
-wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
+wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));
+        try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(a.audience==='all'||ts.includes(uid)){ws.send(JSON.stringify({type:'announcement',announcement:{id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username}}));break;}}}catch(e){}
+        return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
 
 setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
