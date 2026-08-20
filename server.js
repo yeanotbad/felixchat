@@ -40,7 +40,11 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS blocks (uid TEXT NOT NULL, blocked_uid TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(uid, blocked_uid))`,
     `CREATE TABLE IF NOT EXISTS groups (gid TEXT PRIMARY KEY, name TEXT NOT NULL, owner_id TEXT NOT NULL, created_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS group_members (gid TEXT NOT NULL, uid TEXT NOT NULL, joined_at INTEGER NOT NULL, PRIMARY KEY(gid, uid))`,
-    `CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, sender_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', audience TEXT DEFAULT 'all', targets_json TEXT DEFAULT '[]', created_at INTEGER NOT NULL)`
+    `CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, sender_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', audience TEXT DEFAULT 'all', targets_json TEXT DEFAULT '[]', created_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS announcement_views (announcement_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(announcement_id, uid))`,
+    `CREATE TABLE IF NOT EXISTS group_messages (id TEXT PRIMARY KEY, gid TEXT NOT NULL, sender_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', created_at INTEGER NOT NULL, edited INTEGER DEFAULT 0)`,
+    `CREATE INDEX IF NOT EXISTS idx_group_messages_time ON group_messages(gid, created_at)`,
+    `CREATE TABLE IF NOT EXISTS pinned_messages (message_id TEXT PRIMARY KEY, chat_key TEXT NOT NULL, pinned_by TEXT NOT NULL, pinned_at INTEGER NOT NULL)`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -48,7 +52,9 @@ async function init() {
     `ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'member'`,
     `ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN banned_at INTEGER`,
-    `ALTER TABLE users ADD COLUMN banned_by TEXT`
+    `ALTER TABLE users ADD COLUMN banned_by TEXT`,
+    `ALTER TABLE users ADD COLUMN status_text TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN banner TEXT DEFAULT ''`
   ]) { try { await db.execute(sql); } catch (e) {} }
   // The @felixchat account is the sole owner of the admin powers.
   // This does not change any other account's role.
@@ -96,7 +102,7 @@ function broadcast(uid, payload) {
 }
 function pair(a,b,payload){ broadcast(a,payload); broadcast(b,payload); }
 function publicUser(u, online=false){
-  return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', role:u.role || 'member', online, streak:u.streak || 0 };
+  return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', online, lastSeen:u.last_seen || 0, streak:u.streak || 0 };
 }
 
 app.get('/api/health', async (_req,res)=>res.json({ok:true, database:process.env.TURSO_DATABASE_URL?'turso':'local'}));
@@ -149,18 +155,23 @@ app.get('/api/me',auth,async(req,res)=>{
 const upload=multer({storage:multer.diskStorage({destination:(_r,_f,cb)=>cb(null,UPLOADS),filename:(_r,file,cb)=>cb(null,id()+path.extname(file.originalname||'').toLowerCase().slice(0,10))}),limits:{fileSize:50*1024*1024}});
 
 app.patch('/api/profile',auth,async(req,res)=>{
-  const display=clean(req.body.displayName||'').slice(0,30),bio=String(req.body.bio||'').slice(0,160);
+  const display=clean(req.body.displayName||'').slice(0,40),bio=String(req.body.bio||'').slice(0,300),statusText=String(req.body.statusText||'').slice(0,80),banner=String(req.body.banner||'').trim();
+  if(banner && !/^https:\/\/res\.cloudinary\.com\//i.test(banner)) return res.status(400).json({error:'Banner must be a Cloudinary URL'});
   const hasAvatar=Object.prototype.hasOwnProperty.call(req.body,'avatar');
-  if(hasAvatar){
-    const avatar=String(req.body.avatar||'').slice(0,1200000);
-    await db.execute({sql:'UPDATE users SET display_name=?, bio=?, avatar=? WHERE uid=?',args:[display||null,bio,avatar,req.uid]});
-  }else{
-    await db.execute({sql:'UPDATE users SET display_name=?, bio=? WHERE uid=?',args:[display||null,bio,req.uid]});
-  }
-  res.json({ok:true});
+  if(hasAvatar){const avatar=String(req.body.avatar||'').slice(0,1200000);await db.execute({sql:'UPDATE users SET display_name=?, bio=?, avatar=?, status_text=?, banner=? WHERE uid=?',args:[display||null,bio,avatar,statusText,banner,req.uid]});}
+  else await db.execute({sql:'UPDATE users SET display_name=?, bio=?, status_text=?, banner=? WHERE uid=?',args:[display||null,bio,statusText,banner,req.uid]});
+  res.json(publicUser(await getUser(req.uid),(sockets.get(req.uid)?.size||0)>0));
 });
 
 // Profile pictures are stored as permanent Cloudinary URLs in Turso.
+app.get('/api/users/search',auth,async(req,res)=>{
+  const q=String(req.query.q||'').trim().toLowerCase();
+  const r=await db.execute({sql:`SELECT * FROM users WHERE lower(username) LIKE ? OR lower(COALESCE(display_name,'')) LIKE ? ORDER BY username LIMIT 30`,args:[`%${q}%`,`%${q}%`]});
+  const out=[]; for(const u of r.rows){ if(u.uid===req.uid) continue; if(await blocked(req.uid,u.uid)||await blocked(u.uid,req.uid)) continue; out.push(publicUser(u,(sockets.get(u.uid)?.size||0)>0)); } res.json(out);
+});
+app.post('/api/account/change-password',auth,async(req,res)=>{const current=String(req.body.currentPassword||''), next=String(req.body.newPassword||'');if(next.length<6)return res.status(400).json({error:'New password must be at least 6 characters.'});const u=await getUser(req.uid);if(!u||hash(current,u.salt)!==u.password_hash)return res.status(400).json({error:'Current password is incorrect.'});const salt=crypto.randomBytes(16).toString('hex');await db.execute({sql:'UPDATE users SET salt=?,password_hash=? WHERE uid=?',args:[salt,hash(next,salt),req.uid]});res.json({ok:true});});
+app.post('/api/account/logout-other-sessions',auth,async(req,res)=>{const current=req.headers.authorization?.replace(/^Bearer\s+/i,'');await db.execute({sql:'DELETE FROM sessions WHERE uid=? AND token<>?',args:[req.uid,current]});res.json({ok:true});});
+
 app.post('/api/profile/avatar',auth,async(req,res)=>{
   try{
     const avatar=String(req.body?.avatar||'').trim().slice(0,2000);
@@ -187,7 +198,7 @@ app.post('/api/block/:uid',auth,async(req,res)=>{await db.execute({sql:'INSERT O
 app.delete('/api/block/:uid',auth,async(req,res)=>{await db.execute({sql:'DELETE FROM blocks WHERE uid=? AND blocked_uid=?',args:[req.uid,req.params.uid]});res.json({ok:true});});
 
 function messageRow(x){return {id:x.id,from:x.sender_id,to:x.receiver_id,text:x.text||'',kind:x.kind,url:x.url||'',name:x.name||'',mime:x.mime||'',time:x.created_at,readAt:x.read_at,expiresAt:x.expires_at,replyTo:x.reply_to,edited:!!x.edited};}
-app.get('/api/messages/:uid',auth,async(req,res)=>{if(!await areFriends(req.uid,req.params.uid))return res.status(403).json({error:'Not friends'});const r=await db.execute({sql:`SELECT * FROM messages WHERE chat_key=? AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at`,args:[chatKey(req.uid,req.params.uid),now()]});res.json(r.rows.map(messageRow));});
+app.get('/api/messages/:uid',auth,async(req,res)=>{if(!await areFriends(req.uid,req.params.uid))return res.status(403).json({error:'Not friends'});const r=await db.execute({sql:`SELECT * FROM messages WHERE chat_key=? AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at`,args:[chatKey(req.uid,req.params.uid),now()]});const out=[];for(const row of r.rows){const m=messageRow(row);const rr=await db.execute({sql:'SELECT uid,emoji FROM reactions WHERE message_id=? ORDER BY created_at',args:[m.id]});m.reactions=rr.rows;out.push(m)}res.json(out);});
 app.post('/api/messages/:uid',auth,async(req,res)=>{
   const other=req.params.uid;if(!await areFriends(req.uid,other))return res.status(403).json({error:'Not friends'});if(await blocked(req.uid,other)||await blocked(other,req.uid))return res.status(403).json({error:'Messaging unavailable'});
   const text=String(req.body.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'Empty message'});
@@ -198,6 +209,9 @@ app.post('/api/messages/:uid',auth,async(req,res)=>{
 app.patch('/api/messages/:uid/:messageId',auth,async(req,res)=>{const text=String(req.body.text||'').trim().slice(0,4000);const r=await db.execute({sql:'SELECT * FROM messages WHERE id=? AND sender_id=?',args:[req.params.messageId,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'UPDATE messages SET text=?, edited=1 WHERE id=?',args:[text,req.params.messageId]});const m=messageRow({...r.rows[0],text,edited:1});pair(req.uid,r.rows[0].receiver_id,{type:'message_edited',message:m});res.json(m);});
 app.post('/api/messages/:uid/:messageId/read',auth,async(req,res)=>{await db.execute({sql:'UPDATE messages SET read_at=? WHERE id=? AND receiver_id=?',args:[now(),req.params.messageId,req.uid]});const r=await db.execute({sql:'SELECT sender_id FROM messages WHERE id=?',args:[req.params.messageId]});if(r.rows[0])broadcast(r.rows[0].sender_id,{type:'message_read',messageId:req.params.messageId,at:now()});res.json({ok:true});});
 app.post('/api/messages/:uid/:messageId/react',auth,async(req,res)=>{const emoji=String(req.body.emoji||'❤️').slice(0,8);await db.execute({sql:'INSERT INTO reactions(message_id,uid,emoji,created_at) VALUES(?,?,?,?) ON CONFLICT(message_id,uid) DO UPDATE SET emoji=excluded.emoji,created_at=excluded.created_at',args:[req.params.messageId,req.uid,emoji,now()]});const r=await db.execute({sql:'SELECT * FROM reactions WHERE message_id=?',args:[req.params.messageId]});const mr=await db.execute({sql:'SELECT sender_id,receiver_id FROM messages WHERE id=?',args:[req.params.messageId]});if(mr.rows[0])pair(mr.rows[0].sender_id,mr.rows[0].receiver_id,{type:'reaction',messageId:req.params.messageId,reactions:r.rows});res.json(r.rows);});
+app.get('/api/messages/:uid/pinned',auth,async(req,res)=>{if(!await areFriends(req.uid,req.params.uid))return res.status(403).json({error:'Not friends'});const r=await db.execute({sql:`SELECT p.*,m.text,m.kind,m.url,m.name,m.mime,m.sender_id,m.receiver_id,m.created_at FROM pinned_messages p JOIN messages m ON m.id=p.message_id WHERE p.chat_key=? ORDER BY p.pinned_at DESC`,args:[chatKey(req.uid,req.params.uid)]});res.json(r.rows.map(x=>({...messageRow(x),pinnedAt:x.pinned_at,pinnedBy:x.pinned_by})));});
+app.post('/api/messages/:uid/:messageId/pin',auth,async(req,res)=>{if(!await areFriends(req.uid,req.params.uid))return res.status(403).json({error:'Not friends'});const r=await db.execute({sql:'SELECT id FROM messages WHERE id=? AND chat_key=?',args:[req.params.messageId,chatKey(req.uid,req.params.uid)]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'INSERT OR REPLACE INTO pinned_messages(message_id,chat_key,pinned_by,pinned_at) VALUES(?,?,?,?)',args:[req.params.messageId,chatKey(req.uid,req.params.uid),req.uid,now()]});res.json({ok:true});});
+app.delete('/api/messages/:uid/:messageId/pin',auth,async(req,res)=>{await db.execute({sql:'DELETE FROM pinned_messages WHERE message_id=? AND chat_key=?',args:[req.params.messageId,chatKey(req.uid,req.params.uid)]});res.json({ok:true});});
 app.delete('/api/messages/:uid/:messageId',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM messages WHERE id=? AND sender_id=?',args:[req.params.messageId,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'DELETE FROM messages WHERE id=?',args:[req.params.messageId]});pair(req.uid,r.rows[0].receiver_id,{type:'message_deleted',messageId:req.params.messageId});if(r.rows[0].url?.startsWith('/uploads/'))fs.unlink(path.join(UPLOADS,path.basename(r.rows[0].url)),()=>{});res.json({ok:true});});
 
 
@@ -300,6 +314,13 @@ app.post('/api/admin/command',auth,async(req,res)=>{
 });
 
 
+// Group chat features.
+async function groupMember(gid,uid){const r=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[gid,uid]});return r.rows.length>0;}
+async function broadcastGroup(gid,payload){const r=await db.execute({sql:'SELECT uid FROM group_members WHERE gid=?',args:[gid]});for(const x of r.rows)broadcast(x.uid,payload);}
+app.get('/api/groups/:gid/messages',auth,async(req,res)=>{if(!await groupMember(req.params.gid,req.uid))return res.status(403).json({error:'Not a group member'});const r=await db.execute({sql:'SELECT m.*,u.username,u.display_name,u.avatar FROM group_messages m JOIN users u ON u.uid=m.sender_id WHERE m.gid=? ORDER BY m.created_at LIMIT 1000',args:[req.params.gid]});res.json(r.rows.map(x=>({id:x.id,gid:x.gid,from:x.sender_id,text:x.text||'',kind:x.kind||'text',url:x.url||'',name:x.name||'',mime:x.mime||'',time:x.created_at,edited:!!x.edited,senderUsername:x.username,senderDisplayName:x.display_name||x.username,avatar:x.avatar||''})));});
+app.post('/api/groups/:gid/messages',auth,async(req,res)=>{const gid=req.params.gid;if(!await groupMember(gid,req.uid))return res.status(403).json({error:'Not a group member'});const text=String(req.body.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'Empty message'});const m={id:id(),gid,from:req.uid,text,kind:'text',url:'',name:'',mime:'',time:now(),edited:false};await db.execute({sql:'INSERT INTO group_messages(id,gid,sender_id,text,kind,created_at) VALUES(?,?,?,?,?,?)',args:[m.id,gid,req.uid,text,'text',m.time]});await broadcastGroup(gid,{type:'group_message',message:m});res.json(m);});
+app.post('/api/groups/:gid/members/remove',auth,async(req,res)=>{const gid=req.params.gid,other=req.body.uid;const g=await db.execute({sql:'SELECT owner_id FROM groups WHERE gid=?',args:[gid]});if(!g.rows[0]||g.rows[0].owner_id!==req.uid)return res.status(403).json({error:'Only the group owner can remove members'});await db.execute({sql:'DELETE FROM group_members WHERE gid=? AND uid=?',args:[gid,other]});res.json({ok:true});});
+
 // Announcements: owners and moderators can send a full-screen announcement
 // either to everybody or to a selected list of accounts.
 app.get('/api/announcements/recent',auth,async(req,res)=>{
@@ -308,7 +329,8 @@ app.get('/api/announcements/recent',auth,async(req,res)=>{
   for(const a of r.rows){
     let targets=[];try{targets=JSON.parse(a.targets_json||'[]');}catch{}
     if(a.audience==='all'||targets.includes(req.uid)){
-      out.push({id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username});
+      const seen=await db.execute({sql:'SELECT 1 FROM announcement_views WHERE announcement_id=? AND uid=?',args:[a.id,req.uid]});
+      if(!seen.rows.length) out.push({id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username});
     }
   }
   res.json(out.slice(0,3));
@@ -354,12 +376,12 @@ app.get('/api/notifications/unread',auth,async(req,res)=>{
 
 // Simple group-chat backend.
 app.post('/api/groups',auth,async(req,res)=>{const name=String(req.body.name||'New Group').trim().slice(0,40);const gid=id();await db.batch([{sql:'INSERT INTO groups(gid,name,owner_id,created_at) VALUES(?,?,?,?)',args:[gid,name,req.uid,now()]},{sql:'INSERT INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[gid,req.uid,now()]}]);res.json({gid,name});});
-app.get('/api/groups',auth,async(req,res)=>{const r=await db.execute({sql:`SELECT g.* FROM groups g JOIN group_members m ON m.gid=g.gid WHERE m.uid=? ORDER BY g.created_at DESC`,args:[req.uid]});res.json(r.rows);});
+app.get('/api/groups',auth,async(req,res)=>{const r=await db.execute({sql:`SELECT g.* FROM groups g JOIN group_members m ON m.gid=g.gid WHERE m.uid=? ORDER BY g.created_at DESC`,args:[req.uid]});const out=[];for(const g of r.rows){const m=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN group_members gm ON gm.uid=u.uid WHERE gm.gid=?`,args:[g.gid]});out.push({...g,members:m.rows.map(u=>publicUser(u,(sockets.get(u.uid)?.size||0)>0))});}res.json(out);});
 app.post('/api/groups/:gid/members',auth,async(req,res)=>{const other=req.body.uid;const member=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[req.params.gid,req.uid]});if(!member.rows.length)return res.status(403).json({error:'Not a group member'});await db.execute({sql:'INSERT OR IGNORE INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[req.params.gid,other,now()]});res.json({ok:true});});
 
 wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));
-        try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(a.audience==='all'||ts.includes(uid)){ws.send(JSON.stringify({type:'announcement',announcement:{id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username}}));break;}}}catch(e){}
-        return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
+        try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(!(a.audience==='all'||ts.includes(uid)))continue;const seen=await db.execute({sql:'SELECT 1 FROM announcement_views WHERE announcement_id=? AND uid=?',args:[a.id,uid]});if(seen.rows.length)continue;const announcement={id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username};ws.send(JSON.stringify({type:'announcement',announcement}));await db.execute({sql:'INSERT OR IGNORE INTO announcement_views(announcement_id,uid,viewed_at) VALUES(?,?,?)',args:[a.id,uid,now()]});break;}}catch(e){}
+        return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});if(uid&&m.type==='group_typing'&&m.gid&&await groupMember(m.gid,uid))await broadcastGroup(m.gid,{type:'group_typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
 
 setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
