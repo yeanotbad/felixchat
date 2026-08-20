@@ -1711,6 +1711,24 @@ alert(error.message);
 }
 
 
+/* CLOUDINARY MEDIA UPLOADS */
+let cloudinaryConfigPromise=null;
+async function getCloudinaryConfig(){
+  if(!cloudinaryConfigPromise) cloudinaryConfigPromise=api('/cloudinary-config');
+  return cloudinaryConfigPromise;
+}
+async function uploadToCloudinary(file){
+  if(!file) return null;
+  const cfg=await getCloudinaryConfig();
+  const form=new FormData();
+  form.append('file',file);
+  form.append('upload_preset',cfg.uploadPreset);
+  const r=await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cfg.cloudName)}/auto/upload`,{method:'POST',body:form});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||!d.secure_url) throw new Error(d.error?.message||'Cloudinary upload failed');
+  return {url:d.secure_url,name:file.name,mime:file.type||'',kind:d.resource_type||'auto'};
+}
+
 /* AVATARS */
 function avatarMarkup(user){return user?.avatar?`<img src="${escapeHtml(user.avatar)}" alt="" onerror="this.style.display='none'">`:initials(user?.username||'')}
 function setAvatar(el,user){if(el)el.innerHTML=avatarMarkup(user)}
@@ -2186,23 +2204,14 @@ function chooseFile(accept){
 }
 
 async function uploadSelectedFile(event){
-  const file=event.target.files?.[0];
-  event.target.value="";
-  if(!file || !activeFriend) return;
-  if(file.size>50*1024*1024){ alert("That file is over 50 MB."); return; }
-
-  const form=new FormData();
-  form.append("file",file);
+  const file=event.target.files?.[0];event.target.value='';
+  if(!file||!activeFriend)return;
+  if(file.size>50*1024*1024)return alert('File is over 50 MB.');
   try{
-    const response=await fetch(API+"/upload/"+activeFriend.uid,{
-      method:"POST",
-      headers: token ? {Authorization:"Bearer "+token} : {},
-      body:form
-    });
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data.error||"Upload failed");
-    appendMessage(data);
-  }catch(error){ alert(error.message); }
+    const uploaded=await uploadToCloudinary(file);
+    const m=await api('/upload/'+activeFriend.uid,{method:'POST',body:JSON.stringify({url:uploaded.url,name:uploaded.name,mime:uploaded.mime})});
+    appendMessage(m);
+  }catch(e){alert(e.message)}
 }
 
 let mediaRecorder=null,recordedChunks=[],recordingStream=null;
@@ -2229,11 +2238,8 @@ async function toggleRecording(){
       const file=new File([blob],"voice-"+Date.now()+".webm",{type:blob.type});
       const form=new FormData(); form.append("file",file);
       try{
-        const response=await fetch(API+"/upload/"+activeFriend.uid,{
-          method:"POST",headers:{Authorization:"Bearer "+token},body:form
-        });
-        const data=await response.json().catch(()=>({}));
-        if(!response.ok) throw new Error(data.error||"Voice upload failed");
+        const uploaded=await uploadToCloudinary(file);
+        const data=await api('/upload/'+activeFriend.uid,{method:'POST',body:JSON.stringify({url:uploaded.url,name:uploaded.name,mime:uploaded.mime})});
         appendMessage(data);
       }catch(error){alert(error.message);}
     };
@@ -2422,12 +2428,7 @@ function renderStories(){
 }
 function escapeHtml(x){const d=document.createElement('div');d.textContent=x??'';return d.innerHTML}
 function createStory(){$('storyInput').click()}
-async function uploadStory(e){const file=e.target.files?.[0];e.target.value='';if(!file)return;if(file.size>50*1024*1024)return alert('Story is over 50 MB.');const caption=prompt('Story caption (optional):','')||'';const f=new FormData();f.append('file',file);f.append('caption',caption);try{const r=await fetch(API+'/stories',{method:'POST',headers:{Authorization:'Bearer '+token},body:f});const d=await r.json();if(!r.ok)throw new Error(d.error||'Story upload failed');await showStories()}catch(err){alert(err.message)}}
-function viewStory(st){$('storyViewer').style.display='flex';const media=$('storyViewerMedia');media.innerHTML=st.kind==='video'?`<video src="${st.url}" controls autoplay></video>`:`<img src="${st.url}">`;$('storyViewerCaption').textContent=st.caption||('@'+st.username);if(st.uid!==me?.uid)api('/stories/'+st.id+'/view',{method:'POST'}).catch(()=>{})}
-function closeStory(e){if(e&&e.target.closest('.story-viewer-box')&&!e.target.classList.contains('story-close'))return;$('storyViewer').style.display='none'}
-async function showMyStories(){
-  try{const mine=await loadMyStories();let html='<h2>👁 Your Stories</h2><p class="small">Only you can see this viewer list.</p>';if(!mine.length)html+='<p>No active stories.</p>';mine.forEach(st=>{html+=`<div class="request" style="display:block"><div style="display:flex;gap:10px;align-items:center"><div class="avatar">${st.kind==='video'?'🎥':'📷'}</div><b style="flex:1">${escapeHtml(st.caption||'Your story')}</b><span class="small">${st.views} view${st.views===1?'':'s'}</span></div><div style="margin-top:8px">${st.viewers.length?st.viewers.map(v=>`<span class="reaction-chip">👁 ${escapeHtml(v.displayName||v.username)}</span>`).join(' '):'<span class="small">Nobody has viewed this yet.</span>'}</div><div class="row"><button class="btn" onclick='viewStory(${JSON.stringify(st).replace(/'/g,"&#39;")})'>View</button><button class="btn" onclick="deleteStory('${st.id}')">Delete</button></div></div>`});html+='<button class="btn" onclick="closeModal()">Done</button>';openModal(html)}catch(e){alert(e.message)}
-}
+async function uploadStory(e){const file=e.target.files?.[0];e.target.value='';if(!file)return;if(file.size>50*1024*1024)return alert('Story is over 50 MB.');const caption=prompt('Story caption (optional):','')||'';try{const uploaded=await uploadToCloudinary(file);const d=await api('/stories',{method:'POST',body:JSON.stringify({url:uploaded.url,mime:uploaded.mime,caption})});await showStories()}catch(err){alert(err.message)}}
 async function deleteStory(id){if(!confirm('Delete this story?'))return;try{await api('/stories/'+id,{method:'DELETE'});await showStories();showMyStories()}catch(e){alert(e.message)}}
 function syncAdminButton(){
   const admin=$('adminBtn'), mod=$('modBtn');
@@ -2484,7 +2485,7 @@ async function adminUnban(uid){
 
 async function searchUsers(){const q=($('quickSearch')?.value||'').trim();if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));let html='<h2>🔎 People</h2>';if(!users.length)html+='<p>No users found.</p>';users.forEach(u=>{html+=`<div class="request"><div class="avatar">${initials(u.username)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)}</div></b><button class="btn primary" onclick="sendFoundFriend('${u.username}')">Add</button></div>`});html+='<button class="btn" onclick="closeModal()">Done</button>';openModal(html)}catch(e){alert(e.message)}}
 async function sendFoundFriend(username){try{await api('/friends/request',{method:'POST',body:JSON.stringify({username})});alert('Friend request sent!')}catch(e){alert(e.message)}}
-function editProfile(){openModal(`<h2>👤 Edit profile</h2><div class="profile-upload"><div id="profilePreview" class="avatar">${avatarMarkup(me)}</div><div style="flex:1"><b>Profile picture</b><input id="profileAvatarFile" type="file" accept="image/*" class="input" style="margin-top:6px" onchange="previewProfileImage(event)"><div class="small" style="margin-top:5px">Choose a picture from your computer. It is stored permanently in Turso.</div></div></div><br><input id="profileDisplay" class="input" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProfile()">Save</button></div>`)}
+function editProfile(){openModal(`<h2>👤 Edit profile</h2><div class="profile-upload"><div id="profilePreview" class="avatar">${avatarMarkup(me)}</div><div style="flex:1"><b>Profile picture</b><input id="profileAvatarFile" type="file" accept="image/*" class="input" style="margin-top:6px" onchange="previewProfileImage(event)"><div class="small" style="margin-top:5px">Choose a picture from your computer. It is stored permanently in Cloudinary.</div></div></div><br><input id="profileDisplay" class="input" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProfile()">Save</button></div>`)}
 function previewProfileImage(event){const f=event.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('profilePreview').innerHTML=`<img src="${r.result}" alt="">`};r.readAsDataURL(f)}
 async function saveProfile(){
   try{
@@ -2492,9 +2493,8 @@ async function saveProfile(){
     if(file){
       if(!file.type.startsWith('image/'))throw new Error('Choose an image file.');
       if(file.size>10*1024*1024)throw new Error('Profile pictures must be 10 MB or smaller.');
-      const form=new FormData();form.append('file',file);
-      const r=await fetch(API+'/profile/avatar',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
-      const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Profile picture upload failed');
+      const uploaded=await uploadToCloudinary(file);
+      const d=await api('/profile/avatar',{method:'POST',body:JSON.stringify({avatar:uploaded.url})});
     }
     // Do not send an empty avatar here; the server deliberately preserves the stored picture.
     await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value})});
@@ -2557,8 +2557,12 @@ async function sendAnnouncement(){
   if(!text&&!file)return alert('Add text or choose an image, video, or audio file.');
   if(audience==='selected'&&!announcementSelected.size)return alert('Select at least one person.');
   if(file&&file.size>50*1024*1024)return alert('File is over 50 MB.');
-  const form=new FormData();form.append('text',text);form.append('targetMode',audience);form.append('targets',JSON.stringify([...announcementSelected]));if(file)form.append('file',file);
-  try{const r=await fetch(API+'/announcements',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Announcement failed');closeModal();alert('Announcement sent.')}catch(e){alert(e.message)}
+  try{
+    let uploaded=null;
+    if(file){if(file.size>50*1024*1024)return alert('Media is over 50 MB.');uploaded=await uploadToCloudinary(file);}
+    const d=await api('/announcements',{method:'POST',body:JSON.stringify({text,targetMode:audience,targets:JSON.stringify([...announcementSelected]),url:uploaded?.url||'',name:uploaded?.name||'',mime:uploaded?.mime||''})});
+    closeModal();alert('Announcement sent.');
+  }catch(e){alert(e.message)}
 }
 function showAnnouncement(a){
   const media=a.kind==='image'?`<div class="announcement-media"><img src="${a.url}" alt="Announcement"></div>`:a.kind==='video'?`<div class="announcement-media"><video src="${a.url}" controls autoplay playsinline></video></div>`:a.kind==='audio'?`<div class="announcement-media"><audio src="${a.url}" controls autoplay></audio></div>`:'';
