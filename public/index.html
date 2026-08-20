@@ -2838,6 +2838,7 @@ setInterval(()=>{if(!me||!socket)return},5000);
 (function addFeatureButton(){const bar=document.querySelector('.snap-toolbar');if(bar&&!$('featureHubBtn')){const b=document.createElement('button');b.id='featureHubBtn';b.className='btn';b.textContent='✨ More Features';b.onclick=showFeatureHub;bar.appendChild(b)}})();
 </script>
 
+<script>
 const _baseRenderFriends=window.renderFriends;
 window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'● Online · ':'○ Offline · ')+f.statusText;});};
 const _baseSelectFriend2=window.selectFriend;
@@ -2852,5 +2853,6 @@ async function searchGroupMembers(){const q=$('newGroupMemberSearch').value.trim
 function toggleGroupMember(uid,on){if(on)newGroupSelected.add(uid);else newGroupSelected.delete(uid)}
 async function finishCreateGroup(){const name=$('newGroupName').value.trim()||'New Group';try{const g=await api('/groups',{method:'POST',body:JSON.stringify({name})});for(const uid of newGroupSelected)await api('/groups/'+g.gid+'/members',{method:'POST',body:JSON.stringify({uid})});await openGroupsPanel()}catch(e){alert(e.message)}}
 window.createFeatureGroup=createGroupWizard;
+</script>
 
 </body>
