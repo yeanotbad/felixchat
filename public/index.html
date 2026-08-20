@@ -2233,6 +2233,226 @@ sendMessage();
 });
 
 
+
+/* REAL CALLING — WebRTC + the existing WebSocket signaling channel */
+let callPC=null;
+let callLocalStream=null;
+let callRemoteStream=null;
+let callPeer=null;
+let callRole=null;
+let callMode='audio';
+let incomingCall=null;
+let pendingIceCandidates=[];
+
+function showCallOverlay(title,sub){
+  $("callTitle").textContent=title||"Call";
+  $("callSub").textContent=sub||"";
+  $("callOverlay").style.display="flex";
+}
+function hideCallOverlay(){
+  $("callOverlay").style.display="none";
+  $("incomingActions").style.display="none";
+}
+function stopCallTracks(){
+  if(callLocalStream) callLocalStream.getTracks().forEach(t=>t.stop());
+  if(callRemoteStream) callRemoteStream.getTracks().forEach(t=>t.stop());
+  callLocalStream=null;
+  callRemoteStream=null;
+  $("localVideo").srcObject=null;
+  $("remoteVideo").srcObject=null;
+}
+function closeCallPeer(){
+  try{callPC?.close()}catch{}
+  callPC=null;
+  pendingIceCandidates=[];
+}
+function resetCallUI(){
+  stopCallTracks();
+  closeCallPeer();
+  callPeer=null;
+  callRole=null;
+  incomingCall=null;
+  $("remoteVideo").style.display="none";
+  $("localVideo").style.display="none";
+  $("callAudioIcon").style.display="block";
+  $("callControls").style.display="flex";
+  hideCallOverlay();
+}
+function sendCall(type,to,payload=null,callType=callMode){
+  if(!socket || socket.readyState!==WebSocket.OPEN) throw new Error("Realtime connection is not ready. Please wait a moment and try again.");
+  socket.send(JSON.stringify({type,to,payload,callType}));
+}
+function attachCallPeerEvents(){
+  callPC.onicecandidate=e=>{
+    if(e.candidate && callPeer){
+      sendCall("call_signal",callPeer,{kind:"candidate",candidate:e.candidate},callMode);
+    }
+  };
+  callPC.ontrack=e=>{
+    callRemoteStream=e.streams[0]||callRemoteStream;
+    if(callRemoteStream){
+      $("remoteVideo").srcObject=callRemoteStream;
+      $("remoteVideo").style.display=callMode==="video"?"block":"none";
+      $("callAudioIcon").style.display=callMode==="video"?"none":"block";
+    }
+  };
+  callPC.onconnectionstatechange=()=>{
+    if(!callPC)return;
+    const state=callPC.connectionState;
+    if(state==="connected"){
+      $("callSub").textContent=callMode==="video"?"Video call connected":"Call connected";
+    }else if(["failed","disconnected","closed"].includes(state) && callRole){
+      $("callSub").textContent="Call disconnected";
+      setTimeout(()=>{if(callRole) resetCallUI()},900);
+    }
+  };
+}
+async function makeCallPeer(){
+  callPC=new RTCPeerConnection({
+    iceServers:[
+      {urls:"stun:stun.l.google.com:19302"},
+      {urls:"stun:stun1.l.google.com:19302"}
+    ]
+  });
+  attachCallPeerEvents();
+  callLocalStream=await navigator.mediaDevices.getUserMedia(
+    callMode==="video"?{audio:true,video:true}:{audio:true,video:false}
+  );
+  callLocalStream.getTracks().forEach(track=>callPC.addTrack(track,callLocalStream));
+  $("localVideo").srcObject=callLocalStream;
+  $("localVideo").style.display=callMode==="video"?"block":"none";
+}
+async function startCall(mode){
+  if(!activeFriend)return;
+  if(!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection){
+    alert("Calling is not supported by this browser.");
+    return;
+  }
+  if(!activeFriend.online){
+    alert("This friend is offline. They need to be online to receive the call.");
+    return;
+  }
+  if(callPC || incomingCall){
+    alert("You are already in a call.");
+    return;
+  }
+  callMode=mode==="video"?"video":"audio";
+  callPeer=activeFriend.uid;
+  callRole="caller";
+  showCallOverlay(callMode==="video"?"📹 Calling @"+activeFriend.username:"📞 Calling @"+activeFriend.username,"Requesting microphone"+(callMode==="video"?" and camera":"")+"…");
+  try{
+    await makeCallPeer();
+    const offer=await callPC.createOffer();
+    await callPC.setLocalDescription(offer);
+    sendCall("call_invite",callPeer,{offer:callPC.localDescription},callMode);
+    $("callSub").textContent="Ringing…";
+  }catch(e){
+    console.error(e);
+    alert("Could not start the call. Check your microphone/camera permissions.");
+    resetCallUI();
+  }
+}
+async function handleIncomingCall(msg){
+  if(callPC || incomingCall){
+    try{sendCall("call_reject",msg.from,null,msg.callType||"audio")}catch{}
+    return;
+  }
+  incomingCall=msg;
+  callPeer=msg.from;
+  callMode=msg.callType==="video"?"video":"audio";
+  callRole="receiver";
+  const friend=(me?.friends||[]).find(f=>f.uid===msg.from);
+  const name=friend?.username||"Friend";
+  showCallOverlay(callMode==="video"?"📹 Incoming video call":"📞 Incoming call","@"+name+" is calling you");
+  $("incomingActions").style.display="flex";
+  $("callControls").style.display="none";
+  $("callAudioIcon").textContent=callMode==="video"?"📹":"📞";
+}
+async function acceptIncomingCall(){
+  if(!incomingCall)return;
+  try{
+    $("incomingActions").style.display="none";
+    $("callControls").style.display="flex";
+    $("callSub").textContent="Connecting…";
+    await makeCallPeer();
+    const offer=incomingCall.payload?.offer;
+    if(!offer)throw new Error("Missing call offer");
+    await callPC.setRemoteDescription(new RTCSessionDescription(offer));
+    for(const c of pendingIceCandidates.splice(0)){
+      try{await callPC.addIceCandidate(c)}catch{}
+    }
+    const answer=await callPC.createAnswer();
+    await callPC.setLocalDescription(answer);
+    sendCall("call_accept",callPeer,{answer:callPC.localDescription},callMode);
+    incomingCall=null;
+  }catch(e){
+    console.error(e);
+    alert("Could not accept the call. Check your microphone/camera permissions.");
+    try{sendCall("call_reject",callPeer,null,callMode)}catch{}
+    resetCallUI();
+  }
+}
+function rejectIncomingCall(){
+  if(callPeer){
+    try{sendCall("call_reject",callPeer,null,callMode)}catch{}
+  }
+  resetCallUI();
+}
+function endCall(){
+  if(callPeer){
+    try{sendCall("call_end",callPeer,null,callMode)}catch{}
+  }
+  resetCallUI();
+}
+async function handleCallSignal(msg){
+  if(!callPC || msg.from!==callPeer)return;
+  const p=msg.payload||{};
+  try{
+    if(p.kind==="answer" && callRole==="caller"){
+      await callPC.setRemoteDescription(new RTCSessionDescription(p.description||p.answer));
+      for(const c of pendingIceCandidates.splice(0)){
+        try{await callPC.addIceCandidate(c)}catch{}
+      }
+    }else if(p.kind==="candidate" && p.candidate){
+      if(callPC.remoteDescription && callPC.remoteDescription.type){
+        await callPC.addIceCandidate(new RTCIceCandidate(p.candidate));
+      }else{
+        pendingIceCandidates.push(new RTCIceCandidate(p.candidate));
+      }
+    }
+  }catch(e){console.error("Call signaling error",e);}
+}
+function handleCallMessage(message){
+  if(message.type==="call_invite"){handleIncomingCall(message);return;}
+  if(message.type==="call_accept"){
+    if(callRole==="caller" && callPC && message.payload?.answer){
+      $("callSub").textContent="Connecting…";
+      callPC.setRemoteDescription(new RTCSessionDescription(message.payload.answer))
+        .then(async()=>{
+          for(const c of pendingIceCandidates.splice(0)){
+            try{await callPC.addIceCandidate(c)}catch{}
+          }
+        })
+        .catch(e=>{console.error("Call answer error",e);resetCallUI();});
+    }
+    return;
+  }
+  if(message.type==="call_reject"){
+    if(callRole){
+      $("callSub").textContent="Call declined";
+      setTimeout(resetCallUI,700);
+    }
+    return;
+  }
+  if(message.type==="call_signal"){handleCallSignal(message);return;}
+  if(message.type==="call_end"){
+    if(callRole){
+      $("callSub").textContent="Call ended";
+      setTimeout(resetCallUI,500);
+    }
+  }
+}
+
 /* REAL TIME */
 
 function connectSocket(){
@@ -2274,6 +2494,11 @@ event => {
 
 const message =
 JSON.parse(event.data);
+
+if(["call_invite","call_accept","call_reject","call_signal","call_end"].includes(message.type)){
+  handleCallMessage(message);
+  return;
+}
 
 if(
 message.type ===
@@ -2326,6 +2551,13 @@ connectSocket();
 
 }
 
+
+window.addEventListener("beforeunload",()=>{
+  if(callPeer && socket?.readyState===WebSocket.OPEN){
+    try{sendCall("call_end",callPeer,null,callMode)}catch{}
+  }
+  resetCallUI();
+});
 
 /* LOG OUT */
 
