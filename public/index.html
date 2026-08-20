@@ -2357,6 +2357,23 @@ if(message.type === "message"){
 if(message.type === "message_deleted"){
   removeMessage(message.messageId);
 }
+if(message.type === "message_edited"){
+  if(activeFriend && message.message && message.message.from===activeFriend.uid) loadMessages();
+}
+if(message.type === "reaction"){
+  if(activeFriend && message.messageId){ loadMessages(); }
+}
+if(message.type === "group_message"){
+  if(activeGroup && message.message?.gid===activeGroup.gid) appendGroupMessage(message.message);
+  if(browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid) new Notification('Felix Chat',{body:(message.message?.text||'New group message').slice(0,100)});
+}
+if(message.type === "typing"){
+  if(activeFriend && message.uid===activeFriend.uid){ const el=$('featureTypingIndicator'); if(el)el.textContent=message.typing?'Typing…':''; }
+}
+if(message.type === "group_typing"){
+  if(activeGroup && message.uid!==me?.uid && message.typing){ const el=$('featureTypingIndicator'); if(el)el.textContent='Someone is typing…'; setTimeout(()=>{if(el)el.textContent=''},1200); }
+}
+if(message.type === "message" && browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid){ new Notification('Felix Chat',{body:(message.message?.text||'New message').slice(0,100)}); }
 if(message.type === "role_changed" || message.type === "banned"){
   loadUser();
 }
@@ -2416,9 +2433,38 @@ let storiesCache=[];
 let typingTimer=null;
 
 async function showStories(){
-  try{storiesCache=await api('/stories');renderStories();if(!storiesCache.length)openModal('<h2>👻 Stories</h2><p>No stories yet. Add the first one!</p><button class="btn" onclick="closeModal()">Done</button>')}catch(e){alert(e.message)}
+  try{
+    storiesCache=await api('/stories');
+    renderStories();
+    if(!storiesCache.length){openModal('<h2>👻 Stories</h2><p>No stories yet. Add the first one!</p><button class="btn" onclick="closeModal()">Done</button>');return;}
+    const first=storiesCache.find(st=>st.uid!==me?.uid)||storiesCache[0];
+    if(first)viewStory(first);
+  }catch(e){alert('Could not load stories: '+e.message)}
 }
 async function loadMyStories(){return await api('/stories/mine')}
+async function showMyStories(){
+  try{
+    const mine=await loadMyStories();
+    if(!mine.length){openModal('<h2>👻 Your Stories</h2><p>You have no active stories.</p><button class="btn" onclick="closeModal()">Done</button>');return;}
+    closeModal();
+    viewStory(mine[0]);
+  }catch(e){alert('Could not load your stories: '+e.message)}
+}
+async function viewStory(st){
+  if(!st||!$('storyViewer'))return;
+  const media=$('storyViewerMedia');
+  const cap=$('storyViewerCaption');
+  media.innerHTML='';
+  cap.textContent=st.caption||'';
+  if(st.kind==='video'){
+    const v=document.createElement('video');v.src=st.url;v.controls=true;v.autoplay=true;v.playsInline=true;media.appendChild(v);
+  }else{
+    const img=document.createElement('img');img.src=st.url;img.alt='Story';media.appendChild(img);
+  }
+  $('storyViewer').style.display='flex';
+  try{await api('/stories/'+encodeURIComponent(st.id)+'/view',{method:'POST',body:'{}'})}catch(e){}
+}
+function closeStory(e){if(e&&e.target&&e.target.closest('.story-viewer-box')&&!e.target.classList.contains('story-close'))return;if(e)e.stopPropagation();const v=$('storyViewer');if(v)v.style.display='none';const m=$('storyViewerMedia');if(m)m.innerHTML='';}
 function renderStories(){
   const strip=$('storyStrip');if(!strip)return;strip.innerHTML='';
   const add=document.createElement('div');add.className='story-card';add.innerHTML='<div class="story-ring story-add">＋</div><div class="small">Your story</div>';add.onclick=createStory;strip.appendChild(add);
@@ -2743,6 +2789,68 @@ connectSocket=function(){
 };
 </script>
 
-</body>
+<style>
+/* Felix Chat feature pack - additive UI only */
+.feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.feature-card{background:#141c2c;border:1px solid #2f3c5b;border-radius:14px;padding:12px}.feature-card h3{margin:0 0 6px}.feature-list{max-height:55vh;overflow:auto}.group-row,.search-user-row{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#141c2c;margin:7px 0;cursor:pointer}.group-row:hover,.search-user-row:hover{background:#1b2742}.role-badge{display:inline-block;margin-left:5px;padding:2px 6px;border-radius:7px;font-size:10px;font-weight:900;background:#293655;color:#fff}.role-badge.vip{background:#765f1d}.role-badge.mod{background:#24506c}.role-badge.admin{background:#5d2c72}.custom-status{color:#9ba8c2;font-size:12px;margin-top:2px}.banner-preview{width:100%;max-height:180px;object-fit:cover;border-radius:12px;margin-top:8px}.typing-live{min-height:18px;padding:3px 18px;color:#8fa1c0;font-size:12px}.reaction-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.reaction-chip{cursor:pointer}.feature-search{display:flex;gap:7px}.security-note{font-size:12px;color:#9aa6bf}
+@media(max-width:700px){.feature-grid{grid-template-columns:1fr}}
+</style>
+<script>
+/* ================= ADDITIVE FEATURE PACK ================= */
+let activeGroup=null, featureGroups=[], featureTypingTimer=null, browserNotificationsEnabled=false;
+function roleBadge(user){const r=String(user?.role||'member').toLowerCase();return r==='admin'?'<span class="role-badge admin">ADMIN</span>':r==='mod'?'<span class="role-badge mod">MOD</span>':r==='vip'?'<span class="role-badge vip">VIP</span>':''}
+function userLabel(user){return `@${escapeHtml(user?.username||'user')}${roleBadge(user)}`}
+function showFeatureHub(){openModal(`<h2>✨ Felix Chat Features</h2><div class="feature-grid"><button class="btn" onclick="openGroupsPanel()">👥 Group Chats</button><button class="btn" onclick="openUserSearchPanel()">🔎 User Search</button><button class="btn" onclick="editProfile()">🎨 Custom Profile</button><button class="btn" onclick="openSecurityPanel()">🔐 Account Security</button><button class="btn" onclick="openPinnedPanel()">📌 Pinned Messages</button><button class="btn" onclick="enableBrowserNotifications()">🔔 Notifications</button><button class="btn" onclick="showRequests()">👥 Friend Requests</button></div><p class="security-note" style="margin-top:14px">New features are additive and use your existing Turso + Cloudinary setup.</p><button class="btn" onclick="closeModal()">Close</button>`)}
+function openUserSearchPanel(){openModal(`<h2>🔎 Find People</h2><div class="feature-search"><input id="featureSearchInput" class="input" placeholder="Username or name"><button class="btn primary" onclick="runFeatureSearch()">Search</button></div><div id="featureSearchResults" class="feature-list" style="margin-top:10px"></div><button class="btn" onclick="closeModal()">Done</button>`)}
+async function runFeatureSearch(){const q=($('featureSearchInput')?.value||'').trim();if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));$('featureSearchResults').innerHTML=users.length?users.map(u=>`<div class="search-user-row"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1"><b>${userLabel(u)}</b><div class="small">${escapeHtml(u.displayName||u.username)}${u.online?' · Online':''}</div></div><button class="btn primary" onclick="sendFoundFriend('${escapeHtml(u.username)}')">Add</button></div>`).join(''):'<div class="small">No users found.</div>'}catch(e){alert(e.message)}}
+async function openGroupsPanel(){try{featureGroups=await api('/groups');openModal(`<h2>👥 Group Chats</h2><button class="btn primary" onclick="createFeatureGroup()">＋ Create Group</button><div class="feature-list" style="margin-top:10px">${featureGroups.length?featureGroups.map(g=>`<div class="group-row" onclick="selectGroup('${g.gid}')"><div class="avatar">${initials(g.name)}</div><div style="flex:1"><b>${escapeHtml(g.name)}</b><div class="small">${g.members?.length||1} members</div></div>›</div>`).join(''):'<div class="small" style="margin-top:12px">No groups yet.</div>'}</div><button class="btn" onclick="closeModal()">Done</button>`)}catch(e){alert(e.message)}}
+async function createFeatureGroup(){const name=prompt('Group name:','New Group');if(!name)return;try{await api('/groups',{method:'POST',body:JSON.stringify({name})});await openGroupsPanel()}catch(e){alert(e.message)}}
+async function selectGroup(gid){const g=featureGroups.find(x=>x.gid===gid)|| (await api('/groups')).find(x=>x.gid===gid);if(!g)return;activeGroup=g;activeFriend=null;closeModal();$('friendName').innerHTML=escapeHtml(g.name);$('friendStatus').textContent=`👥 ${g.members?.length||1} members`;$('featureTypingIndicator').textContent='';if($('friendAvatar'))$('friendAvatar').innerHTML=initials(g.name);$('callActions').style.display='none';$('messageInput').disabled=false;const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openGroupManage()" title="Group options">⋮</button>';await loadGroupMessages(gid)}
+async function openGroupManage(){if(!activeGroup)return;const g=activeGroup;const canRemove=g.owner_id===me?.uid;openModal(`<h2>⚙️ ${escapeHtml(g.name)}</h2><p class="small">${g.members?.length||1} members</p><div class="feature-list">${(g.members||[]).map(u=>`<div class="search-user-row"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1"><b>${userLabel(u)}</b><div class="small">${u.uid===g.owner_id?'Owner':''}</div></div>${canRemove&&u.uid!==me.uid?`<button class="btn" onclick="removeGroupMember('${g.gid}','${u.uid}')">Remove</button>`:''}</div>`).join('')}</div>${g.owner_id===me?.uid?'<button class="btn primary" onclick="addGroupMemberWizard()">＋ Add Members</button>':''}<button class="btn" onclick="openGroupsPanel()">Back</button>`)}
+async function removeGroupMember(gid,uid){try{await api('/groups/'+gid+'/members/remove',{method:'POST',body:JSON.stringify({uid})});featureGroups=await api('/groups');activeGroup=featureGroups.find(x=>x.gid===gid)||activeGroup;openGroupManage()}catch(e){alert(e.message)}}
+async function addGroupMemberWizard(){const q=prompt('Enter username to add:','');if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));const u=users[0];if(!u)return alert('User not found.');await api('/groups/'+activeGroup.gid+'/members',{method:'POST',body:JSON.stringify({uid:u.uid})});featureGroups=await api('/groups');activeGroup=featureGroups.find(x=>x.gid===activeGroup.gid);openGroupManage()}catch(e){alert(e.message)}}
+async function loadGroupMessages(gid){try{const ms=await api('/groups/'+gid+'/messages');const c=$('messages');c.innerHTML='';if(!ms.length){c.innerHTML='<div class="empty">No group messages yet. 👋</div>';return}ms.forEach(m=>c.appendChild(groupMessageBubble(m)));c.scrollTop=c.scrollHeight}catch(e){alert(e.message)}}
+function groupMessageBubble(m){const b=messageBubble(m);b.dataset.groupId=m.gid;return b}
+const _baseSendMessage=window.sendMessage;
+window.sendMessage=async function(){if(!activeGroup)return _baseSendMessage();const input=$('messageInput'),text=input.value.trim();if(!text)return;input.value='';try{const m=await api('/groups/'+activeGroup.gid+'/messages',{method:'POST',body:JSON.stringify({text})});appendGroupMessage(m)}catch(e){input.value=text;alert(e.message)}};
+function appendGroupMessage(m){const c=$('messages');const empty=c.querySelector('.empty');if(empty)empty.remove();if(c.querySelector(`[data-message-id="${CSS.escape(m.id)}"]`))return;c.appendChild(groupMessageBubble(m));c.scrollTop=c.scrollHeight}
+const _baseSelectFriend=window.selectFriend;
+window.selectFriend=async function(friend){activeGroup=null;await _baseSelectFriend(friend)};
+function sendFeatureTyping(){if(!socket||socket.readyState!==WebSocket.OPEN)return;if(activeGroup)socket.send(JSON.stringify({type:'group_typing',gid:activeGroup.gid,typing:true}));else if(activeFriend)socket.send(JSON.stringify({type:'typing',to:activeFriend.uid,typing:true}));clearTimeout(featureTypingTimer);featureTypingTimer=setTimeout(()=>{if(!socket||socket.readyState!==WebSocket.OPEN)return;if(activeGroup)socket.send(JSON.stringify({type:'group_typing',gid:activeGroup.gid,typing:false}));else if(activeFriend)socket.send(JSON.stringify({type:'typing',to:activeFriend.uid,typing:false}))},1000)}
+$('messageInput')?.addEventListener('input',sendFeatureTyping);
+function openSecurityPanel(){openModal(`<h2>🔐 Account Security</h2><div class="feature-card"><h3>Change password</h3><input id="oldPass" class="input" type="password" placeholder="Current password"><br><br><input id="newPass" class="input" type="password" placeholder="New password"><br><br><button class="btn primary" onclick="changeFeaturePassword()">Change Password</button></div><div class="feature-card" style="margin-top:10px"><h3>Sessions</h3><p class="security-note">Sign out Felix Chat on your other devices.</p><button class="btn" onclick="logoutOtherSessions()">Log out other sessions</button></div><button class="btn" onclick="closeModal()">Done</button>`)}
+async function changeFeaturePassword(){try{await api('/account/change-password',{method:'POST',body:JSON.stringify({currentPassword:$('oldPass').value,newPassword:$('newPass').value})});alert('Password changed.');$('oldPass').value='';$('newPass').value=''}catch(e){alert(e.message)}}
+async function logoutOtherSessions(){try{await api('/account/logout-other-sessions',{method:'POST'});alert('Other sessions have been logged out.')}catch(e){alert(e.message)}}
+async function enableBrowserNotifications(){if(!('Notification' in window))return alert('Browser notifications are not supported.');const p=await Notification.requestPermission();if(p==='granted'){browserNotificationsEnabled=true;new Notification('Felix Chat',{body:'Notifications enabled.'})}else alert('Notification permission was not granted.')}
+/* Custom profile adds status + banner without removing the existing avatar/bio fields. */
+window.editProfile=function(){openModal(`<h2>👤 Edit profile</h2><div class="profile-upload"><div id="profilePreview" class="avatar">${avatarMarkup(me)}</div><div style="flex:1"><b>Profile picture</b><input id="profileAvatarFile" type="file" accept="image/*" class="input" style="margin-top:6px" onchange="previewProfileImage(event)"></div></div><input id="profileDisplay" class="input" style="margin-top:12px" placeholder="Display name" value="${escapeHtml(me?.displayName||me?.username||'')}"><br><br><textarea id="profileBio" class="input" rows="3" placeholder="Bio">${escapeHtml(me?.bio||'')}</textarea><br><input id="profileStatus" class="input" placeholder="Custom status (e.g. Gaming 🎮)" value="${escapeHtml(me?.statusText||'')}"><br><br><input id="profileBannerFile" type="file" accept="image/*" class="input"><div class="small" style="margin:5px 0">Optional profile banner</div><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveFeatureProfile()">Save</button></div>`)}
+async function saveFeatureProfile(){try{const af=$('profileAvatarFile')?.files?.[0],bf=$('profileBannerFile')?.files?.[0];let avatar=me?.avatar||'',banner=me?.banner||'';if(af)avatar=(await uploadToCloudinary(af)).url;if(bf)banner=(await uploadToCloudinary(bf)).url;const d=await api('/profile',{method:'PATCH',body:JSON.stringify({displayName:$('profileDisplay').value,bio:$('profileBio').value,statusText:$('profileStatus').value,banner})});if(avatar&&avatar!==me?.avatar)await api('/profile/avatar',{method:'POST',body:JSON.stringify({avatar})});me={...me,...d,avatar:avatar||d.avatar};setAvatar($('myAvatar'),me);$('myName').textContent='@'+me.username;closeModal()}catch(e){alert(e.message)}}
+/* Message reactions + edit controls are layered on top of the existing renderer. */
+const _baseMessageBubble=window.messageBubble;
+window.messageBubble=function(message){const b=_baseMessageBubble(message);if(message.reactions?.length){const row=document.createElement('div');row.className='reaction-row';row.innerHTML=message.reactions.map(r=>`<button class="reaction-chip" onclick="reactFeature('${message.id}','${escapeHtml(r.emoji)}')">${escapeHtml(r.emoji)}</button>`).join('');b.appendChild(row)}if(message.from===me?.uid && message.kind==='text'){const edit=document.createElement('button');edit.textContent='Edit';edit.onclick=()=>editFeatureMessage(message);const react=document.createElement('button');react.textContent='❤️';react.onclick=()=>reactFeature(message.id,'❤️');const tools=b.querySelector('.message-tools');if(tools){tools.appendChild(edit);tools.appendChild(react)} }else{const react=document.createElement('button');react.textContent='❤️';react.onclick=()=>reactFeature(message.id,'❤️');const tools=document.createElement('div');tools.className='message-tools';tools.appendChild(react);b.appendChild(tools)}return b}
+async function reactFeature(id,emoji){if(!activeFriend)return;try{const rs=await api('/messages/'+activeFriend.uid+'/'+id+'/react',{method:'POST',body:JSON.stringify({emoji})});const n=$(`[data-message-id="${CSS.escape(id)}"]`);if(n){n.querySelector('.reaction-row')?.remove();const row=document.createElement('div');row.className='reaction-row';row.innerHTML=rs.map(r=>`<button class="reaction-chip">${escapeHtml(r.emoji)}</button>`).join('');n.appendChild(row)}}catch(e){alert(e.message)}}
+async function editFeatureMessage(m){const text=prompt('Edit message:',m.text||'');if(text===null)return;try{await api('/messages/'+activeFriend.uid+'/'+m.id,{method:'PATCH',body:JSON.stringify({text})});await loadMessages()}catch(e){alert(e.message)}}
+/* Incoming real-time additions */
+const _oldConnectSocket=window.connectSocket;
+window.connectSocket=function(){_oldConnectSocket();};
+/* Patch the socket message handler by listening on the same socket without replacing existing behavior. */
+setInterval(()=>{if(!me||!socket)return},5000);
+/* Add a features button once the DOM is ready. */
+(function addFeatureButton(){const bar=document.querySelector('.snap-toolbar');if(bar&&!$('featureHubBtn')){const b=document.createElement('button');b.id='featureHubBtn';b.className='btn';b.textContent='✨ More Features';b.onclick=showFeatureHub;bar.appendChild(b)}})();
+</script>
 
-</html>
+const _baseRenderFriends=window.renderFriends;
+window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'● Online · ':'○ Offline · ')+f.statusText;});};
+const _baseSelectFriend2=window.selectFriend;
+window.selectFriend=async function(friend){await _baseSelectFriend2(friend);const b=$('friendName');if(b)b.innerHTML=userLabel(friend);if($('featureTypingIndicator'))$('featureTypingIndicator').textContent='';const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button>';};
+function openPinnedPanel(){if(!activeFriend)return alert('Choose a friend first.');api('/messages/'+activeFriend.uid+'/pinned').then(rows=>openModal(`<h2>📌 Pinned Messages</h2>${rows.length?rows.map(m=>`<div class="feature-card" style="margin:8px 0"><b>${escapeHtml(m.text||m.kind||'Media')}</b><div class="small">${new Date(m.time).toLocaleString()}</div></div>`).join(''):'<p>No pinned messages.</p>'}<button class="btn" onclick="closeModal()">Done</button>`)).catch(e=>alert(e.message))}
+async function pinFeatureMessage(id){if(!activeFriend)return;try{await api('/messages/'+activeFriend.uid+'/'+id+'/pin',{method:'POST'});alert('Message pinned.')}catch(e){alert(e.message)}}
+const _oldMessageBubble2=window.messageBubble;
+window.messageBubble=function(message){const b=_oldMessageBubble2(message);if(message.from===me?.uid||activeFriend){const tools=b.querySelector('.message-tools');if(tools&&message.kind==='text'){const pin=document.createElement('button');pin.textContent='📌';pin.title='Pin';pin.onclick=()=>pinFeatureMessage(message.id);tools.appendChild(pin)}}return b};
+function createGroupWizard(){openModal(`<h2>👥 Create Group</h2><input id="newGroupName" class="input" placeholder="Group name"><br><br><input id="newGroupMemberSearch" class="input" placeholder="Search users"><button class="btn" onclick="searchGroupMembers()">Search</button><div id="newGroupMembers" class="feature-list" style="margin-top:8px"></div><div class="row"><button class="btn" onclick="openGroupsPanel()">Cancel</button><button class="btn primary" onclick="finishCreateGroup()">Create</button></div>`)}
+let newGroupSelected=new Set();
+async function searchGroupMembers(){const q=$('newGroupMemberSearch').value.trim();if(!q)return;const users=await api('/users/search?q='+encodeURIComponent(q));$('newGroupMembers').innerHTML=users.map(u=>`<label class="search-user-row"><input type="checkbox" onchange="${''} toggleGroupMember('${u.uid}',this.checked)"><div class="avatar">${avatarMarkup(u)}</div><b>${userLabel(u)}</b></label>`).join('')}
+function toggleGroupMember(uid,on){if(on)newGroupSelected.add(uid);else newGroupSelected.delete(uid)}
+async function finishCreateGroup(){const name=$('newGroupName').value.trim()||'New Group';try{const g=await api('/groups',{method:'POST',body:JSON.stringify({name})});for(const uid of newGroupSelected)await api('/groups/'+g.gid+'/members',{method:'POST',body:JSON.stringify({uid})});await openGroupsPanel()}catch(e){alert(e.message)}}
+window.createFeatureGroup=createGroupWizard;
+
+</body>
