@@ -2538,7 +2538,7 @@ setInterval(()=>{if(me)syncAdminButton()},1500);
 
 <script>
 /* REAL WEBRTC CALLING — uses the existing authenticated WebSocket for signaling. */
-let callPC=null,callStream=null,callRemoteStream=null,callMode='audio',callId=null,callPeer=null,callIncomingOffer=null,callState='idle';
+let callPC=null,callStream=null,callRemoteStream=null,callMode='audio',callId=null,callPeer=null,callIncomingOffer=null,callState='idle',callPendingIce=[];
 
 function sendCallSignal(type,payload){
   if(!socket || socket.readyState!==WebSocket.OPEN || !callPeer)return;
@@ -2571,7 +2571,7 @@ async function startCall(mode){
   }catch(e){cleanupCall();alert('Microphone/camera permission was denied or unavailable.')}
 }
 async function createCallPeer(){
-  if(callPC)callPC.close();
+  if(callPC)return callPC;
   callPC=new RTCPeerConnection({
     iceServers:[
       {urls:'stun:stun.l.google.com:19302'},
@@ -2584,6 +2584,7 @@ async function createCallPeer(){
   callPC.onicecandidate=e=>{if(e.candidate)sendCallSignal('call_signal',{kind:'ice',candidate:e.candidate});};
   callPC.onconnectionstatechange=()=>{
     if(['connected','completed'].includes(callPC.connectionState)){
+      if(callState!=='connected') callState='connected';
       $('callSub').textContent='Connected';
       callState='connected';
     }else if(['failed','disconnected','closed'].includes(callPC.connectionState) && callState!=='idle'){
@@ -2591,6 +2592,7 @@ async function createCallPeer(){
     }
   };
   if(callStream)callStream.getTracks().forEach(t=>callPC.addTrack(t,callStream));
+  return callPC;
 }
 async function acceptIncomingCall(){
   if(!callIncomingOffer)return;
@@ -2600,6 +2602,9 @@ async function acceptIncomingCall(){
     $('localVideo').srcObject=callStream;
     await createCallPeer();
     await callPC.setRemoteDescription(new RTCSessionDescription(callIncomingOffer.sdp));
+    for(const candidate of callPendingIce.splice(0)){
+      try{await callPC.addIceCandidate(new RTCIceCandidate(candidate));}catch{}
+    }
     const answer=await callPC.createAnswer();
     await callPC.setLocalDescription(answer);
     sendCallSignal('call_accept',{callId:callIncomingOffer.callId,sdp:answer});
@@ -2622,6 +2627,7 @@ function cleanupCall(){
   callStream=null;
   callRemoteStream=null;
   callIncomingOffer=null;
+  callPendingIce=[];
   callPeer=null;
   callId=null;
   callState='idle';
@@ -2650,8 +2656,12 @@ function handleCallMessage(m){
       callIncomingOffer={callId:callId,sdp:p.sdp};
       return;
     }
-    if(p.kind==='ice' && callPC && p.candidate){
-      callPC.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(()=>{});
+    if(p.kind==='ice' && p.candidate){
+      if(callPC && callPC.remoteDescription){
+        callPC.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(()=>{});
+      }else{
+        callPendingIce.push(p.candidate);
+      }
     }
     return;
   }
@@ -2659,11 +2669,13 @@ function handleCallMessage(m){
     if(callState!=='outgoing')return;
     (async()=>{
       try{
-        await createCallPeer();
+        if(!callPC) throw new Error('Peer connection was lost');
         await callPC.setRemoteDescription(new RTCSessionDescription(m.payload.sdp));
-        $('callSub').textContent='Connected';
-        callState='connected';
-      }catch(e){cleanupCall();alert('Call connection failed.')}
+        for(const candidate of callPendingIce.splice(0)){
+          try{await callPC.addIceCandidate(new RTCIceCandidate(candidate));}catch{}
+        }
+        $('callSub').textContent='Connecting…';
+      }catch(e){cleanupCall();alert('Call connection failed.')} 
     })();
     return;
   }
