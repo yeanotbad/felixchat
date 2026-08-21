@@ -1391,13 +1391,13 @@ class="friends"
 
 
 <div class="snap-toolbar">
-<button class="btn" onclick="showStories()">👻 Stories</button>
-<button class="btn" onclick="createStory()">📸 Add Story</button>
-<button class="btn" onclick="searchUsers()">🔎 Find People</button>
-<button class="btn" onclick="editProfile()">👤 Profile</button>
-<button id="adminBtn" class="btn" style="display:none" onclick="openAdminPanel()">🛡️ Admin</button>
-<button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">🛡️ Mod Tools</button>
-<button class="btn" onclick="openQuickAdd()">⚡ Quick Add</button>
+<button class="btn" onclick="showStories()">Stories</button>
+<button class="btn" onclick="createStory()">Add Story</button>
+<button class="btn" onclick="searchUsers()">Find People</button>
+<button class="btn" onclick="editProfile()">Profile</button>
+<button id="adminBtn" class="btn" style="display:none" onclick="openAdminPanel()">Admin</button>
+<button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">Mod Tools</button>
+<button class="btn" onclick="openQuickAdd()">Quick Add</button>
 </div>
 <label class="snap-toggle"><input id="disappearingToggle" type="checkbox"> Disappearing messages (24h)</label>
 <div class="snap-search"><input id="quickSearch" class="input" placeholder="Search users..." onkeydown="if(event.key==='Enter')searchUsers()"></div>
@@ -1448,7 +1448,7 @@ Choose a friend
 </div>
 
 </div>
-<div id="devCommandActions" style="display:none;margin-left:6px"><button class="friend-menu-btn" onclick="openDevCommands()" title="Developer/Mod commands">⚡</button></div><div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call">📞 <span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime">📹 <span>FaceTime</span></button></div><div class="friend-actions"><button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button></div>
+<div id="devCommandActions" style="display:none;margin-left:6px"><button class="friend-menu-btn" onclick="openDevCommands()" title="Developer/Mod commands">⚡</button></div><div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call"><span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime"><span>FaceTime</span></button></div><div class="friend-actions"><button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button></div>
 </header>
 
 <section id="storyStrip" class="story-strip"></section>
@@ -1480,9 +1480,9 @@ disabled
 />
 
 <div class="composer-extra">
-<button class="icon-btn" id="imageBtn" onclick="chooseFile('image/*')" title="Send image">🖼️</button>
-<button class="icon-btn" id="videoBtn" onclick="chooseFile('video/*')" title="Send video">🎥</button>
-<button class="icon-btn" id="voiceBtn" onclick="toggleRecording()" title="Record voice">🎙️</button>
+<button class="icon-btn" id="imageBtn" onclick="chooseFile('image/*')" title="Send image">Image</button>
+<button class="icon-btn" id="videoBtn" onclick="chooseFile('video/*')" title="Send video">Video</button>
+<button class="icon-btn" id="voiceBtn" onclick="toggleRecording()" title="Record voice">Voice</button>
 </div>
 <input id="fileInput" type="file" accept="image/*,video/*" onchange="uploadSelectedFile(event)">
 <input id="storyInput" type="file" accept="image/*,video/*" style="display:none" onchange="uploadStory(event)">
@@ -2727,11 +2727,34 @@ function closeAnnouncement(){const el=$('announcementOverlay');if(el)el.remove()
 setInterval(()=>{if(me)syncAdminButton()},1500);
 </script>
 <div id="requestToastStack" class="request-toast-stack"></div>
-<div id="callOverlay" class="call-overlay"><div class="call-card"><div><div id="callTitle" class="call-title">Call</div><div id="callSub" class="call-sub">Connecting…</div></div><div class="call-video-stage"><div id="callAudioIcon" class="call-audio-icon">📞</div><video id="remoteVideo" autoplay playsinline style="display:none"></video><video id="localVideo" autoplay muted playsinline></video></div><div id="incomingActions" class="incoming-actions" style="display:none"><button class="call-control" onclick="acceptIncomingCall()">✅ Accept</button><button class="call-control end" onclick="rejectIncomingCall()">✕ Decline</button></div><div id="callControls" class="call-controls"><button class="call-control end" onclick="endCall()">📞 End</button></div></div></div>
+<div id="callOverlay" class="call-overlay"><div class="call-card"><div><div id="callTitle" class="call-title">Call</div><div id="callSub" class="call-sub">Connecting…</div></div><div class="call-video-stage"><div id="callAudioIcon" class="call-audio-icon">📞</div><video id="remoteVideo" autoplay playsinline style="display:none"></video><video id="localVideo" autoplay muted playsinline></video></div><div id="incomingActions" class="incoming-actions" style="display:none"><button class="call-control" onclick="acceptIncomingCall()">✅ Accept</button><button class="call-control end" onclick="rejectIncomingCall()">✕ Decline</button></div><div id="callControls" class="call-controls">
+<button id="muteCallBtn" class="call-control" onclick="toggleCallMute()">Mute microphone</button>
+<button id="cameraCallBtn" class="call-control" onclick="toggleCallCamera()" style="display:none">Turn off camera</button>
+<button class="call-control end" onclick="endCall()">End call</button>
+</div></div></div>
 
 <script>
 /* REAL WEBRTC CALLING — uses the existing authenticated WebSocket for signaling. */
 let callPC=null,callStream=null,callRemoteStream=null,callMode='audio',callId=null,callPeer=null,callIncomingOffer=null,callState='idle',callPendingIce=[];
+let callMuted=false,callCameraOff=false;
+function updateCallControlLabels(){
+  const m=$('muteCallBtn'), c=$('cameraCallBtn');
+  if(m)m.textContent=callMuted?'Unmute microphone':'Mute microphone';
+  if(c){c.style.display=callMode==='video'?'inline-block':'none';c.textContent=callCameraOff?'Turn on camera':'Turn off camera';}
+}
+function toggleCallMute(){
+  if(!callStream)return;
+  callMuted=!callMuted;
+  callStream.getAudioTracks().forEach(t=>t.enabled=!callMuted);
+  updateCallControlLabels();
+}
+function toggleCallCamera(){
+  if(!callStream || callMode!=='video')return;
+  callCameraOff=!callCameraOff;
+  callStream.getVideoTracks().forEach(t=>t.enabled=!callCameraOff);
+  updateCallControlLabels();
+}
+
 
 function sendCallSignal(type,payload){
   if(!socket || socket.readyState!==WebSocket.OPEN || !callPeer)return;
@@ -2751,10 +2774,11 @@ async function startCall(mode){
   if(!activeFriend)return alert('Choose a friend first.');
   if(callState!=='idle')return alert('You are already in a call.');
   if(!navigator.mediaDevices?.getUserMedia)return alert('Calling requires a secure HTTPS connection and a supported browser.');
-  callMode=mode;callPeer=activeFriend.uid;callId=Math.random().toString(36).slice(2);callState='outgoing';
+  callMode=mode;callPeer=activeFriend.uid;callId=Math.random().toString(36).slice(2);callState='outgoing';callMuted=false;callCameraOff=false;
   try{
     callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:mode==='video'});
     $('localVideo').srcObject=callStream;
+    updateCallControlLabels();
     showCallOverlay(mode==='video'?'📹 Video call':'📞 Voice call','Calling @'+activeFriend.username+'…');
     sendCallSignal('call_invite',{callId});
     await createCallPeer();
@@ -2793,6 +2817,7 @@ async function acceptIncomingCall(){
     callState='incoming';
     callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:callMode==='video'});
     $('localVideo').srcObject=callStream;
+    updateCallControlLabels();
     await createCallPeer();
     await callPC.setRemoteDescription(new RTCSessionDescription(callIncomingOffer.sdp));
     for(const candidate of callPendingIce.splice(0)){
@@ -2824,6 +2849,7 @@ function cleanupCall(){
   callPeer=null;
   callId=null;
   callState='idle';
+  callMuted=false;callCameraOff=false;
   if($('localVideo'))$('localVideo').srcObject=null;
   if($('remoteVideo'))$('remoteVideo').srcObject=null;
   if($('callOverlay'))$('callOverlay').style.display='none';
@@ -2836,7 +2862,7 @@ function handleCallMessage(m){
       if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'call_reject',to:m.from,callType:m.callType||'audio',payload:{busy:true}}));
       return;
     }
-    callPeer=m.from;callId=m.payload?.callId||null;callMode=m.callType==='video'?'video':'audio';callState='incoming';
+    callPeer=m.from;callId=m.payload?.callId||null;callMode=m.callType==='video'?'video':'audio';callState='incoming';callMuted=false;callCameraOff=false;
     callIncomingOffer=null;
     // The caller sends the actual offer as call_signal shortly after the invite.
     showCallOverlay(callMode==='video'?'📹 Incoming video call':'📞 Incoming call','@'+(activeFriend?.username||'Someone')+' is calling…',true);
