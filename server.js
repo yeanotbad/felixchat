@@ -373,8 +373,8 @@ app.get('/api/admin/status',auth,async(req,res)=>{
 app.get('/api/admin/users',auth,async(req,res)=>{
   if(!await requireModerator(req,res))return;
   const q=clean(req.query.q||'').toLowerCase();
-  const r=await db.execute({sql:`SELECT uid,username,display_name,bio,avatar,role,banned,created_at,last_seen FROM users WHERE username LIKE ? OR display_name LIKE ? ORDER BY username LIMIT 100`,args:[`%${q}%`,`%${q}%`]});
-  res.json(r.rows.map(u=>({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',banned:Number(u.banned||0)===1,createdAt:u.created_at,lastSeen:u.last_seen})));
+  const r=await db.execute({sql:`SELECT uid,username,display_name,bio,avatar,role,verified,banned,created_at,last_seen FROM users WHERE username LIKE ? OR display_name LIKE ? ORDER BY username LIMIT 100`,args:[`%${q}%`,`%${q}%`]});
+  res.json(r.rows.map(u=>({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',verified:Number(u.verified||0)===1,banned:Number(u.banned||0)===1,createdAt:u.created_at,lastSeen:u.last_seen})));
 });
 app.post('/api/admin/ban/:uid',auth,async(req,res)=>{
   if(!await requireModerator(req,res))return;
