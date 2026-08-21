@@ -1315,6 +1315,7 @@ button:focus-visible,input:focus-visible{
 @keyframes devBig{50%{transform:scale(1.18)}}
 .dev-effect-invert{animation:devInvert 1.5s ease-in-out}.dev-effect-toast{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:60000;background:#10182aee;border:1px solid #4c5e86;color:#fff;border-radius:14px;padding:10px 16px;font-weight:900;box-shadow:0 12px 35px #0008;pointer-events:none}
 @keyframes devInvert{50%{filter:invert(1) hue-rotate(180deg)}}
+.dev-effect-upsideDown{animation:devUpsideDown 1.8s ease-in-out}.dev-effect-jumpy{animation:devJumpy .7s ease-in-out 3}.dev-effect-clown{animation:devClown 1.5s ease-in-out}.dev-troll-overlay{position:fixed;inset:0;z-index:65000;display:flex;align-items:center;justify-content:center;background:#111c;backdrop-filter:blur(3px);pointer-events:none}.dev-troll-card{background:#121a2b;border:2px solid #6d7cff;border-radius:22px;padding:28px 34px;text-align:center;box-shadow:0 20px 80px #0009;font-weight:900;font-size:22px}.dev-troll-card small{display:block;font-size:12px;color:#9aa6c2;margin-top:8px}@keyframes devUpsideDown{50%{transform:rotate(180deg)}}@keyframes devJumpy{25%{transform:translateY(-18px)}50%{transform:translateY(0)}75%{transform:translateY(-12px)}}@keyframes devClown{0%,100%{filter:hue-rotate(0)}50%{filter:hue-rotate(140deg) saturate(2)}}
 .dev-confetti{position:fixed;inset:0;pointer-events:none;z-index:50000;overflow:hidden}
 .dev-confetti i{position:absolute;width:9px;height:14px;animation:fall 1.6s linear forwards}
 @keyframes fall{from{transform:translateY(-20px) rotate(0)}to{transform:translateY(110vh) rotate(720deg)}}
@@ -2129,9 +2130,19 @@ function showDevConfetti(){
 }
 function applyDevEffect(effect){
   if(effect==='confetti'){showDevConfetti();showDevEffectToast(effect);return;}
+  if(effect==='troll'){
+    const wrap=document.createElement('div');wrap.className='dev-troll-overlay';
+    wrap.innerHTML='<div class="dev-troll-card">😂 YOU GOT TROLLED 😂<small>FelixChat developer sent this.</small></div>';
+    document.body.appendChild(wrap);setTimeout(()=>wrap.remove(),2600);showDevEffectToast(effect);return;
+  }
+  if(effect==='fakeDisconnect'){
+    const wrap=document.createElement('div');wrap.className='dev-troll-overlay';
+    wrap.innerHTML='<div class="dev-troll-card">⚠️ Connection unstable...<small>Just kidding 😭</small></div>';
+    document.body.appendChild(wrap);setTimeout(()=>wrap.remove(),2300);showDevEffectToast(effect);return;
+  }
   const targets=[$('messages'),$('friendAvatar'),$('friendName'),document.querySelector('.chat')].filter(Boolean);
   const cls='dev-effect-'+effect;
-  targets.forEach(el=>{el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);setTimeout(()=>el.classList.remove(cls),1700);});
+  targets.forEach(el=>{el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);setTimeout(()=>el.classList.remove(cls),2200);});
   showDevEffectToast(effect);
 }
 function showDevEffectToast(effect){
@@ -2145,7 +2156,12 @@ function openDevCommands(){
   const commands=isDev
     ? [['shake','🫨 Shake'],['rainbow','🌈 Rainbow'],['spin','🌀 Spin'],['confetti','🎉 Confetti'],['big','🔍 Big'],['invert','🌓 Invert']]
     : [['shake','🫨 Shake'],['rainbow','🌈 Rainbow']];
-  openModal(`<h2>${isDev?'👑 Developer Commands':'🛡️ Mod Commands'}</h2><p class="small">Visual-only commands. Select a friend first.</p><div class="row" style="flex-wrap:wrap">${commands.map(([c,label])=>`<button class="btn primary" onclick="runDevCommand('${c}')">${label}</button>`).join('')}</div><button class="btn" style="margin-top:10px" onclick="closeModal()">Close</button>`);
+  openModal(`<h2>${isDev?'👑 Developer Commands':'🛡️ Mod Commands'}</h2><p class="small">Select a friend first.</p><div class="row" style="flex-wrap:wrap">${commands.map(([c,label])=>`<button class="btn primary" onclick="runDevCommand('${c}')">${label}</button>`).join('')}</div>${isDev?'<button class="btn primary" style="margin-top:10px;width:100%" onclick="openTrollPanel()">😂 Troll Options</button>':''}<button class="btn" style="margin-top:10px" onclick="closeModal()">Close</button>`);
+}
+function openTrollPanel(){
+  if(String(me?.username||'').toLowerCase()!=='felixchat')return;
+  const cmds=[['troll','😂 You Got Trolled'],['fakeDisconnect','📡 Fake Disconnect'],['upsideDown','🙃 Flip Screen'],['jumpy','🐇 Jumpy Screen'],['clown','🤡 Clown Mode'],['confetti','🎉 Confetti'],['big','🔍 Huge Mode'],['invert','🌓 Weird Colors']];
+  openModal(`<h2>😂 Developer Trolls</h2><p class="small">Funny visual effects only. Choose a friend first.</p><div class="row" style="flex-wrap:wrap">${cmds.map(([c,l])=>`<button class="btn primary" onclick="runDevCommand('${c}')">${l}</button>`).join('')}</div><button class="btn" style="margin-top:10px" onclick="openDevCommands()">Back</button>`);
 }
 async function runDevCommand(command){
   if(!activeFriend)return alert('Choose a user first.');
@@ -2881,7 +2897,7 @@ connectSocket=function(){
 <script>
 /* ================= ADDITIVE FEATURE PACK ================= */
 let activeGroup=null, featureGroups=[], featureTypingTimer=null, browserNotificationsEnabled=false;
-function roleBadge(user){const r=String(user?.role||'member').toLowerCase();return r==='admin'?'<span class="role-badge admin">ADMIN</span>':r==='mod'?'<span class="role-badge mod">MOD</span>':r==='vip'?'<span class="role-badge vip">VIP</span>':''}
+function roleBadge(user){const r=String(user?.role||'member').toLowerCase();let out=r==='admin'?'<span class="role-badge admin">ADMIN</span>':r==='mod'?'<span class="role-badge mod">MOD</span>':r==='vip'?'<span class="role-badge vip">VIP</span>':'';if(user?.verified)out+='<span class="verified-tick" title="Verified">✓</span>';return out}
 function userLabel(user){return `@${escapeHtml(user?.username||'user')}${roleBadge(user)}`}
 function showFeatureHub(){openModal(`<h2>✨ Felix Chat Features</h2><div class="feature-grid"><button class="btn" onclick="openGroupsPanel()">👥 Group Chats</button><button class="btn" onclick="openUserSearchPanel()">🔎 User Search</button><button class="btn" onclick="editProfile()">🎨 Custom Profile</button><button class="btn" onclick="openSecurityPanel()">🔐 Account Security</button><button class="btn" onclick="openPinnedPanel()">📌 Pinned Messages</button><button class="btn" onclick="enableBrowserNotifications()">🔔 Notifications</button><button class="btn" onclick="showRequests()">👥 Friend Requests</button></div><p class="security-note" style="margin-top:14px">New features are additive and use your existing Turso + Cloudinary setup.</p><button class="btn" onclick="closeModal()">Close</button>`)}
 function openUserSearchPanel(){openModal(`<h2>🔎 Find People</h2><div class="feature-search"><input id="featureSearchInput" class="input" placeholder="Username or name"><button class="btn primary" onclick="runFeatureSearch()">Search</button></div><div id="featureSearchResults" class="feature-list" style="margin-top:10px"></div><button class="btn" onclick="closeModal()">Done</button>`)}
