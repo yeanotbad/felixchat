@@ -231,7 +231,7 @@ app.post('/api/dev-command',auth,async(req,res)=>{
     if(!target) return res.status(404).json({error:'User not found'});
     if(target.username==='felixchat') return res.status(403).json({error:'The developer account cannot be targeted'});
     const modCommands=new Set(['shake','rainbow','jumpy']);
-    const devCommands=new Set(['shake','rainbow','spin','confetti','big','invert','troll','fakeDisconnect','upsideDown','jumpy','clown']);
+    const devCommands=new Set(['shake','rainbow','spin','confetti','big','invert','troll','fakeDisconnect','upsideDown','jumpy','clown','chaos']);
     if(role==='mod' && !modCommands.has(command)) return res.status(403).json({error:'That command is developer-only'});
     if(role==='admin' && !devCommands.has(command)) return res.status(400).json({error:'Unknown developer command'});
     const payload={type:'dev_effect',effect:command,from:actor.username,fromRole:role,at:Date.now()};
