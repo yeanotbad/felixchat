@@ -29,7 +29,7 @@ const chatKey = (a, b) => [a, b].sort().join(':');
 
 async function init() {
   await db.batch([
-    `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, display_name TEXT, bio TEXT DEFAULT '', avatar TEXT DEFAULT '', role TEXT DEFAULT 'member', created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL, streak INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, display_name TEXT, bio TEXT DEFAULT '', avatar TEXT DEFAULT '', role TEXT DEFAULT 'member', verified INTEGER DEFAULT 0, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL, streak INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, uid TEXT NOT NULL, created_at INTEGER NOT NULL, FOREIGN KEY(uid) REFERENCES users(uid))`,
     `CREATE TABLE IF NOT EXISTS friendships (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(user_id, friend_id))`,
     `CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, chat_key TEXT NOT NULL, sender_id TEXT NOT NULL, receiver_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', created_at INTEGER NOT NULL, read_at INTEGER, expires_at INTEGER, reply_to TEXT, edited INTEGER DEFAULT 0)`,
@@ -50,6 +50,7 @@ async function init() {
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
     `ALTER TABLE announcements ADD COLUMN targets_json TEXT DEFAULT '[]'`,
     `ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'member'`,
+    `ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN banned_at INTEGER`,
     `ALTER TABLE users ADD COLUMN banned_by TEXT`,
@@ -102,7 +103,7 @@ function broadcast(uid, payload) {
 }
 function pair(a,b,payload){ broadcast(a,payload); broadcast(b,payload); }
 function publicUser(u, online=false){
-  return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', online, lastSeen:u.last_seen || 0, streak:u.streak || 0 };
+  return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', verified:Number(u.verified||0)===1, online, lastSeen:u.last_seen || 0, streak:u.streak || 0 };
 }
 
 app.get('/api/health', async (_req,res)=>res.json({ok:true, database:process.env.TURSO_DATABASE_URL?'turso':'local'}));
@@ -223,6 +224,8 @@ app.post('/api/dev-command',auth,async(req,res)=>{
     const command=String(req.body?.command||'').trim().toLowerCase();
     const targetUid=String(req.body?.targetUid||'').trim();
     if(!actor || !['admin','mod'].includes(role)) return res.status(403).json({error:'Developer or moderator access required'});
+    const isOwner = String(actor.username||'').toLowerCase()==='felixchat';
+    if(role==='admin' && !isOwner) return res.status(403).json({error:'Only @felixchat can use developer commands'});
     if(!targetUid || targetUid===req.uid) return res.status(400).json({error:'Choose another user'});
     const target=await getUser(targetUid);
     if(!target) return res.status(404).json({error:'User not found'});
@@ -231,7 +234,7 @@ app.post('/api/dev-command',auth,async(req,res)=>{
     const devCommands=new Set(['shake','rainbow','spin','confetti','big','invert']);
     if(role==='mod' && !modCommands.has(command)) return res.status(403).json({error:'That command is developer-only'});
     if(role==='admin' && !devCommands.has(command)) return res.status(400).json({error:'Unknown developer command'});
-    const payload={type:'dev_effect',effect:command,from:actor.username,fromRole:role};
+    const payload={type:'dev_effect',effect:command,from:actor.username,fromRole:role,at:Date.now()};
     broadcast(target.uid,payload);
     res.json({ok:true,effect:command,target:target.username});
   }catch(e){console.error(e);res.status(500).json({error:'Command failed'});}
@@ -332,6 +335,15 @@ app.post('/api/admin/role/:uid',auth,async(req,res)=>{
   await db.execute({sql:'UPDATE users SET role=? WHERE uid=?',args:[role,req.params.uid]});
   broadcast(req.params.uid,{type:'role_changed',role});
   res.json({ok:true,role});
+});
+app.post('/api/admin/verified/:uid',auth,async(req,res)=>{
+  if(!await requireAdmin(req,res))return;
+  const target=await getUser(req.params.uid);
+  if(!target)return res.status(404).json({error:'User not found'});
+  const verified=!!req.body?.verified;
+  await db.execute({sql:'UPDATE users SET verified=? WHERE uid=?',args:[verified?1:0,req.params.uid]});
+  broadcast(req.params.uid,{type:'verified_changed',verified});
+  res.json({ok:true,verified});
 });
 app.post('/api/admin/command',auth,async(req,res)=>{
   const isMod=await getRole(req.uid);
