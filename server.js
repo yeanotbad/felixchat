@@ -262,7 +262,7 @@ app.post('/api/dev-command',auth,async(req,res)=>{
     if(role==='mod' && !modCommands.has(command)) return res.status(403).json({error:'That command is developer-only'});
     if(role==='admin' && !devCommands.has(command)) return res.status(400).json({error:'Unknown developer command'});
     if(command==='fakepromoteadmin'){
-      broadcast(target.uid,{type:'dev_private_notice',title:'Promotion Notice',text:'You have been promoted to Admin.',fake:true,at:Date.now()});
+      broadcast(target.uid,{type:'dev_private_notice',title:'You’ve been promoted to Admin',text:'Your new role is now active.',fake:true,at:Date.now()});
       return res.json({ok:true,effect:command,target:target.username});
     }
     if(command==='fakeban'){
