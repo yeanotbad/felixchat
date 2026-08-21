@@ -46,7 +46,7 @@ async function touchFriendStreak(a,b){
   }else{
     await db.execute({sql:'INSERT INTO friend_streaks(pair_key,user_a,user_b,streak,last_day) VALUES(?,?,?,?,?)',args:[key,...[a,b].sort(),1,day]});
   }
-  return {pairKey:key,streak,lastDay:day};
+  return {pairKey:key,streak,lastDay:day,formed:!row};
 }
 
 async function init() {
@@ -69,7 +69,8 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS pinned_messages (message_id TEXT PRIMARY KEY, chat_key TEXT NOT NULL, pinned_by TEXT NOT NULL, pinned_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS friend_streaks (pair_key TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, streak INTEGER DEFAULT 0, last_day TEXT DEFAULT '')`,
     `CREATE TABLE IF NOT EXISTS polls (id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, question TEXT NOT NULL, options_json TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS poll_votes (poll_id TEXT NOT NULL, uid TEXT NOT NULL, option_index INTEGER NOT NULL, voted_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`
+    `CREATE TABLE IF NOT EXISTS poll_votes (poll_id TEXT NOT NULL, uid TEXT NOT NULL, option_index INTEGER NOT NULL, voted_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`,
+    `CREATE TABLE IF NOT EXISTS poll_views (poll_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -175,7 +176,7 @@ app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
-  const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); f.streak=Number(sr.rows[0]?.streak||0); f.streakLastDay=sr.rows[0]?.last_day||''; friends.push(f); }
+  const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
   res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,friends,requests:incoming.rows.map(x=>publicUser(x))});
 });
 
@@ -289,12 +290,12 @@ app.post('/api/dev/poll',auth,async(req,res)=>{
   if(!question||options.length<2) return res.status(400).json({error:'Poll needs a question and at least 2 options'});
   const poll={id:id(),question,options,createdAt:now(),expiresAt:now()+86400000,creator:actor.username};
   await db.execute({sql:'INSERT INTO polls(id,creator_id,question,options_json,created_at,expires_at) VALUES(?,?,?,?,?,?)',args:[poll.id,req.uid,poll.question,JSON.stringify(poll.options),poll.createdAt,poll.expiresAt]});
-  for(const uid of sockets.keys()) broadcast(uid,{type:'poll_new',poll});
+  for(const uid of sockets.keys()){ try { const seen=await db.execute({sql:'SELECT 1 FROM poll_views WHERE poll_id=? AND uid=?',args:[poll.id,uid]}); if(seen.rows[0]) continue; await db.execute({sql:'INSERT INTO poll_views(poll_id,uid,viewed_at) VALUES(?,?,?)',args:[poll.id,uid,now()]}); broadcast(uid,{type:'poll_new',poll}); } catch(e) {} }
   res.json({ok:true,poll});
 });
 app.get('/api/polls/active',auth,async(req,res)=>{
   const r=await db.execute({sql:'SELECT * FROM polls WHERE expires_at>? ORDER BY created_at DESC LIMIT 20',args:[now()]});
-  const out=[]; for(const x of r.rows){const v=await db.execute({sql:'SELECT option_index,COUNT(*) count FROM poll_votes WHERE poll_id=? GROUP BY option_index',args:[x.id]}); const mine=await db.execute({sql:'SELECT option_index FROM poll_votes WHERE poll_id=? AND uid=?',args:[x.id,req.uid]}); out.push({id:x.id,question:x.question,options:JSON.parse(x.options_json||'[]'),createdAt:x.created_at,expiresAt:x.expires_at,votes:Object.fromEntries(v.rows.map(z=>[z.option_index,Number(z.count)])),myVote:mine.rows[0]?.option_index??null});} res.json(out);
+  const out=[]; for(const x of r.rows){ const seen=await db.execute({sql:'SELECT 1 FROM poll_views WHERE poll_id=? AND uid=?',args:[x.id,req.uid]}); if(seen.rows[0]) continue; await db.execute({sql:'INSERT INTO poll_views(poll_id,uid,viewed_at) VALUES(?,?,?)',args:[x.id,req.uid,now()]}); const v=await db.execute({sql:'SELECT option_index,COUNT(*) count FROM poll_votes WHERE poll_id=? GROUP BY option_index',args:[x.id]}); const mine=await db.execute({sql:'SELECT option_index FROM poll_votes WHERE poll_id=? AND uid=?',args:[x.id,req.uid]}); out.push({id:x.id,question:x.question,options:JSON.parse(x.options_json||'[]'),createdAt:x.created_at,expiresAt:x.expires_at,votes:Object.fromEntries(v.rows.map(z=>[z.option_index,Number(z.count)])),myVote:mine.rows[0]?.option_index??null});} res.json(out);
 });
 app.post('/api/polls/:id/vote',auth,async(req,res)=>{
   const idx=Number(req.body.optionIndex); const p=await db.execute({sql:'SELECT * FROM polls WHERE id=? AND expires_at>?',args:[req.params.id,now()]}); if(!p.rows[0]) return res.status(404).json({error:'Poll not found'});
@@ -312,7 +313,7 @@ app.post('/api/messages/:uid',auth,async(req,res)=>{
   await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,created_at,expires_at,reply_to) VALUES(?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,m.text,'text',m.time,m.expiresAt,m.replyTo]});
   broadcast(other,{type:'message',message:m});
   const streak=await touchFriendStreak(req.uid,other);
-  if(streak) pair(req.uid,other,{type:'streak_update',streak:streak.streak,lastDay:streak.lastDay});
+  if(streak) pair(req.uid,other,{type:'streak_update',streak:streak.streak,lastDay:streak.lastDay,formed:streak.formed});
   res.json(m);
 });
 app.patch('/api/messages/:uid/:messageId',auth,async(req,res)=>{const text=String(req.body.text||'').trim().slice(0,4000);const r=await db.execute({sql:'SELECT * FROM messages WHERE id=? AND sender_id=?',args:[req.params.messageId,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'UPDATE messages SET text=?, edited=1 WHERE id=?',args:[text,req.params.messageId]});const m=messageRow({...r.rows[0],text,edited:1});pair(req.uid,r.rows[0].receiver_id,{type:'message_edited',message:m});res.json(m);});
