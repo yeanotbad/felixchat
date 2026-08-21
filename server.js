@@ -257,10 +257,18 @@ app.post('/api/dev-command',auth,async(req,res)=>{
     const target=await getUser(targetUid);
     if(!target) return res.status(404).json({error:'User not found'});
     if(target.username==='felixchat') return res.status(403).json({error:'The developer account cannot be targeted'});
-    const modCommands=new Set(['shake','rainbow','jumpy']);
-    const devCommands=new Set(['shake','rainbow','spin','confetti','big','invert','troll','fakeDisconnect','upsideDown','jumpy','clown','chaos']);
+    const modCommands=new Set(['shake','rainbow','jumpy','fakeban','fakepromoteadmin']);
+    const devCommands=new Set(['shake','rainbow','spin','confetti','big','invert','troll','fakeDisconnect','upsideDown','jumpy','clown','chaos','fakeban','fakepromoteadmin']);
     if(role==='mod' && !modCommands.has(command)) return res.status(403).json({error:'That command is developer-only'});
     if(role==='admin' && !devCommands.has(command)) return res.status(400).json({error:'Unknown developer command'});
+    if(command==='fakepromoteadmin'){
+      broadcast(target.uid,{type:'dev_private_notice',title:'Promotion Notice',text:'You have been promoted to Admin.',fake:true,at:Date.now()});
+      return res.json({ok:true,effect:command,target:target.username});
+    }
+    if(command==='fakeban'){
+      broadcast(target.uid,{type:'dev_fakeban',duration:30,from:actor.username,at:Date.now()});
+      return res.json({ok:true,effect:command,target:target.username});
+    }
     const payload={type:'dev_effect',effect:command,from:actor.username,fromRole:role,at:Date.now()};
     broadcast(target.uid,payload);
     res.json({ok:true,effect:command,target:target.username});
