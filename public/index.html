@@ -1304,6 +1304,7 @@ button:focus-visible,input:focus-visible{
 .dev-badge{color:#fff;text-shadow:0 0 8px #ff4fd8,0 0 12px #45e8ff;animation:devRainbow 2s linear infinite}
 .dev-name{border-radius:7px;padding:2px 5px;animation:devRainbowBorder 2s linear infinite}
 .verified-tick{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#2490ff;color:#fff;font-size:10px;box-shadow:0 0 8px #2490ff}
+.rank-toast{position:fixed;right:20px;bottom:20px;z-index:10000;max-width:min(380px,calc(100vw - 40px));padding:14px 18px;border:1px solid #33415f;border-radius:14px;background:#111a2b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.35);font-weight:800;animation:rankToastIn .25s ease-out}.rank-toast .small{font-weight:600;color:#aeb9d0;margin-top:3px}@keyframes rankToastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 .mod-badge{color:#8db7ff}.vip-badge{color:#ffd35a}
 @keyframes devRainbow{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}
 @keyframes devRainbowBorder{0%{box-shadow:0 0 0 2px #ff3b81}33%{box-shadow:0 0 0 2px #7c5cff}66%{box-shadow:0 0 0 2px #20d9ff}100%{box-shadow:0 0 0 2px #ff3b81}}
@@ -2536,10 +2537,30 @@ if(message.type === "group_typing"){
   if(activeGroup && message.uid!==me?.uid && message.typing){ const el=$('featureTypingIndicator'); if(el)el.textContent='Someone is typing…'; setTimeout(()=>{if(el)el.textContent=''},1200); }
 }
 if(message.type === "message" && browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid){ new Notification('Felix Chat',{body:(message.message?.text||'New message').slice(0,100)}); }
-if(message.type === "verified_changed"){ loadUser(); if(activeFriend && activeFriend.uid===me?.uid) activeFriend.verified=message.verified; }
-if(message.type === "role_changed" || message.type === "banned"){ 
-  loadUser();
+function showRankToast(title,detail){
+  const old=document.querySelector('.rank-toast'); if(old) old.remove();
+  const el=document.createElement('div'); el.className='rank-toast';
+  el.innerHTML='<div>'+escapeHtml(title)+'</div>'+(detail?'<div class="small">'+escapeHtml(detail)+'</div>':'');
+  document.body.appendChild(el); setTimeout(()=>el.remove(),5000);
 }
+if(message.type === "verified_changed"){
+  loadUser();
+  if(activeFriend && activeFriend.uid===me?.uid) activeFriend.verified=message.verified;
+  if(message.verified && !message.oldVerified) showRankToast('You’ve been verified','Your verified badge has been added to your account.');
+  if(!message.verified && message.oldVerified) showRankToast('You’ve been unverified','Your verified badge has been removed.');
+}
+if(message.type === "role_changed"){
+  loadUser();
+  const oldRole=String(message.oldRole||'member').toLowerCase();
+  const newRole=String(message.role||'member').toLowerCase();
+  if(oldRole!==newRole){
+    const label=r=>r==='vip'?'VIP':r==='mod'?'Moderator':'Member';
+    const promoted=(newRole==='vip' || newRole==='mod') && (oldRole==='member' || oldRole==='vip');
+    if(promoted) showRankToast('You’ve been promoted to '+label(newRole),'Your new role is now active.');
+    else showRankToast('You’ve been demoted to '+label(newRole),'Your account role has been changed.');
+  }
+}
+if(message.type === "banned"){ loadUser(); }
 
 };
 
