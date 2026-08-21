@@ -1324,6 +1324,8 @@ button:focus-visible,input:focus-visible{
 .avatar{overflow:hidden;position:relative}.avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .call-actions{display:flex;gap:6px;margin-left:auto}.call-btn{width:auto;min-width:42px;height:36px;padding:0 10px;border-radius:10px;background:#171d35;border:1px solid #354264;color:#fff;font-weight:800}.call-btn.video{background:linear-gradient(135deg,#8b5cf6,#ec4899);border-color:transparent}
 .call-overlay{position:fixed;inset:0;z-index:20000;background:rgba(5,7,16,.94);backdrop-filter:blur(18px);display:none;align-items:center;justify-content:center;padding:18px}.call-card{width:min(720px,100%);background:#11162a;border:1px solid #354264;border-radius:24px;padding:18px;box-shadow:0 25px 80px #000b;display:flex;flex-direction:column;gap:12px}.call-title{font-size:20px;font-weight:900}.call-sub{color:#9aa6c2;font-size:13px}.call-video-stage{position:relative;background:#05070d;border-radius:18px;overflow:hidden;min-height:260px;aspect-ratio:16/9}.call-video-stage video{width:100%;height:100%;object-fit:contain;background:#05070d}.call-video-stage #localVideo{position:absolute;right:12px;bottom:12px;width:26%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff4;border-radius:14px;display:none}.call-audio-icon{font-size:64px;text-align:center;padding:70px 0}.call-controls,.incoming-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.call-control{padding:11px 18px;border-radius:12px;background:#202946;color:#fff;border:1px solid #3a4769;font-weight:800}.call-control.end{background:#d83f5d;border-color:#d83f5d}.profile-upload{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed #3a4769;border-radius:12px;background:#0d1322}
+.streak-badge{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:#ff8a45;font-weight:800}.streak-badge.active{color:#ff6b35}.live-location-card{position:fixed;right:18px;bottom:18px;z-index:18000;background:#11182b;border:1px solid #34415d;border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px #0008;max-width:300px}.poll-overlay{position:fixed;inset:0;z-index:17000;background:#05070dcc;display:none;align-items:center;justify-content:center;padding:18px}.poll-card{width:min(520px,100%);background:#11182b;border:1px solid #34415d;border-radius:20px;padding:20px;box-shadow:0 24px 70px #0009}.poll-option{display:block;width:100%;text-align:left;background:#19233a;color:#fff;border:1px solid #354264;border-radius:12px;padding:12px;margin:8px 0;cursor:pointer}.poll-option:hover{background:#233150}.poll-option.selected{border-color:#6c8cff;background:#24345a}.poll-count{float:right;color:#9aa6c2;font-size:12px}
+
 @media(max-width:700px){.call-btn{width:40px;min-width:40px;padding:0}.call-btn span{display:none}.chat-header .profile{min-width:0}.call-card{border-radius:18px;padding:12px}.call-video-stage{min-height:220px}.call-control{min-height:44px}}
 </style>
 </head>
@@ -1448,7 +1450,7 @@ Choose a friend
 </div>
 
 </div>
-<div id="devCommandActions" style="display:none;margin-left:6px"><button class="friend-menu-btn" onclick="openDevCommands()" title="Developer/Mod commands">⚡</button></div><div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call"><span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime"><span>FaceTime</span></button></div><div class="friend-actions"><button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button></div>
+<div id="devCommandActions" style="display:none;margin-left:6px"><button class="friend-menu-btn" onclick="openDevCommands()" title="Developer/Mod commands">⚡</button></div><div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call"><span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime"><span>FaceTime</span></button></div><button class="friend-menu-btn" id="locationBtn" style="display:none" onclick="toggleLiveLocation()" title="Share live location">Location</button><div class="friend-actions"><button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button></div>
 </header>
 
 <section id="storyStrip" class="story-strip"></section>
@@ -1825,7 +1827,7 @@ element.innerHTML = `
 <div class="friend-info">
 
 <b>
-@${friend.username}
+@${friend.username}${friend.verified ? '<span class="verified-tick">✓</span>' : ''}${Number(friend.streak||0)>0 ? `<span class="streak-badge active">${Number(friend.streak)} day streak</span>` : ''}
 </b>
 
 <div class="small">
@@ -2084,6 +2086,7 @@ alert(error.message);
 
 async function selectFriend(friend){
 
+if(lastLocationTarget!==friend.uid) stopLiveLocation();
 activeFriend =
 friend;
 
@@ -2161,10 +2164,25 @@ function openDevCommands(){
   if(!me || !['admin','mod'].includes(String(me.role||'').toLowerCase())) return;
   const isDev=String(me.username||'').toLowerCase()==='felixchat' && String(me.role||'').toLowerCase()==='admin';
   const commands=isDev
-    ? [['shake','🫨 Shake'],['rainbow','🌈 Rainbow'],['spin','🌀 Spin'],['confetti','🎉 Confetti'],['big','🔍 Big'],['invert','🌓 Invert'],['chaos','🤯 CHAOS MODE']]
-    : [['shake','🫨 Shake'],['rainbow','🌈 Rainbow']];
-  openModal(`<h2>${isDev?'👑 Developer Commands':'🛡️ Mod Commands'}</h2><p class="small">Select a friend first.</p><div class="row" style="flex-wrap:wrap">${commands.map(([c,label])=>`<button class="btn primary" onclick="runDevCommand('${c}')">${label}</button>`).join('')}</div>${isDev?'<button class="btn primary" style="margin-top:10px;width:100%" onclick="openTrollPanel()">😂 Troll Options</button>':''}<button class="btn" style="margin-top:10px" onclick="closeModal()">Close</button>`);
+    ? [['shake','Shake'],['rainbow','Rainbow'],['spin','Spin'],['confetti','Confetti'],['big','Big'],['invert','Invert'],['chaos','Chaos Mode']]
+    : [['shake','Shake'],['rainbow','Rainbow']];
+  let extra=isDev?`<button class="btn primary" style="margin-top:10px" onclick="openPollComposer()">Create poll</button><button class="btn primary" style="margin-top:10px" onclick="restoreSelectedStreak()">Restore streak</button><button class="btn primary" style="margin-top:10px" onclick="openTrollPanel()">Troll Options</button>`:'';
+  openModal(`<h2>${isDev?'Developer Commands':'Mod Commands'}</h2><p class="small">Select a friend first.</p><div class="row" style="flex-wrap:wrap">${commands.map(([c,label])=>`<button class="btn primary" onclick="runDevCommand('${c}')">${label}</button>`).join('')}</div>${extra}<button class="btn" style="margin-top:10px" onclick="closeModal()">Close</button>`);
 }
+function openPollComposer(){
+  if(String(me?.username||'').toLowerCase()!=='felixchat')return;
+  openModal(`<h2>Create poll</h2><input id="pollQuestion" class="input" placeholder="Question"><input id="pollOpt1" class="input" placeholder="Option 1"><input id="pollOpt2" class="input" placeholder="Option 2"><input id="pollOpt3" class="input" placeholder="Option 3 (optional)"><input id="pollOpt4" class="input" placeholder="Option 4 (optional)"><button class="btn primary" style="margin-top:10px;width:100%" onclick="sendDevPoll()">Publish to everyone</button><button class="btn" style="margin-top:8px" onclick="openDevCommands()">Back</button>`);
+}
+async function sendDevPoll(){
+  const options=['pollOpt1','pollOpt2','pollOpt3','pollOpt4'].map(id=>$(id)?.value.trim()).filter(Boolean);
+  try{await api('/dev/poll',{method:'POST',body:JSON.stringify({question:$('pollQuestion').value,options})});closeModal();}catch(e){alert(e.message)}
+}
+async function restoreSelectedStreak(){
+  if(!activeFriend)return alert('Choose a friend first.');
+  const value=prompt('Restore streak to how many days?',String(activeFriend.streak||1)); if(value===null)return;
+  try{await api('/dev/streak-restore',{method:'POST',body:JSON.stringify({targetUid:activeFriend.uid,streak:Number(value)||1})});await loadUser();alert('Streak restored.');}catch(e){alert(e.message)}
+}
+
 function openTrollPanel(){
   if(String(me?.username||'').toLowerCase()!=='felixchat')return;
   const cmds=[['troll','😂 You Got Trolled'],['fakeDisconnect','📡 Fake Disconnect'],['upsideDown','🙃 Flip Screen'],['jumpy','🐇 Jumpy Screen'],['clown','🤡 Clown Mode'],['confetti','🎉 Confetti'],['big','🔍 Huge Mode'],['invert','🌓 Weird Colors']];
@@ -2392,6 +2410,38 @@ sendMessage();
 
 /* REAL TIME */
 
+let liveLocationActive=false; let liveLocationTimer=null; let lastLocationTarget=null;
+function toggleLiveLocation(){
+  if(!activeFriend||!socket||socket.readyState!==WebSocket.OPEN)return;
+  if(liveLocationActive){ stopLiveLocation(); return; }
+  if(!navigator.geolocation)return alert('Location is not available on this device.');
+  lastLocationTarget=activeFriend.uid;
+  navigator.geolocation.getCurrentPosition(pos=>{
+    liveLocationActive=true; $('locationBtn').textContent='Stop location';
+    const send=()=>navigator.geolocation.getCurrentPosition(p=>socket.send(JSON.stringify({type:'live_location',to:lastLocationTarget,payload:{lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy,active:true}})),()=>{});
+    send(); liveLocationTimer=setInterval(send,10000);
+  },()=>alert('Location permission was denied.'));
+}
+function stopLiveLocation(){
+  if(liveLocationTimer)clearInterval(liveLocationTimer); liveLocationTimer=null;
+  if(lastLocationTarget&&socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'live_location',to:lastLocationTarget,payload:{lat:0,lon:0,active:false}}));
+  liveLocationActive=false; if($('locationBtn'))$('locationBtn').textContent='Location';
+}
+function showLiveLocation(m){
+  const old=$('liveLocationCard'); if(old)old.remove(); if(m.payload?.active===false)return;
+  const el=document.createElement('div');el.id='liveLocationCard';el.className='live-location-card';
+  el.innerHTML=`<b>Live location</b><div class="small" style="margin-top:4px">${escapeHtml(activeFriend?.username||'A friend')} is sharing their location.</div><button class="btn" style="margin-top:8px" onclick="window.open('https://www.google.com/maps?q=${m.payload.lat},${m.payload.lon}','_blank')">Open map</button>`;document.body.appendChild(el);
+}
+function renderPoll(poll){
+  const existing=$('pollOverlay'); if(existing)existing.remove();
+  const overlay=document.createElement('div');overlay.id='pollOverlay';overlay.className='poll-overlay';
+  const counts=poll.votes||{};
+  overlay.innerHTML=`<div class="poll-card"><h2>${escapeHtml(poll.question)}</h2><div id="pollOptions">${poll.options.map((o,i)=>`<button class="poll-option ${poll.myVote===i?'selected':''}" onclick="votePoll('${poll.id}',${i})">${escapeHtml(o)}<span class="poll-count" data-count="${i}">${Number(counts[i]||0)}</span></button>`).join('')}</div><div class="small" style="margin-top:10px">Poll closes in 24 hours.</div><button class="btn" style="margin-top:10px" onclick="$('pollOverlay').remove()">Close</button></div>`;
+  document.body.appendChild(overlay);overlay.style.display='flex';
+}
+async function votePoll(id,index){try{await api('/polls/'+id+'/vote',{method:'POST',body:JSON.stringify({optionIndex:index})});}catch(e){alert(e.message)}}
+async function loadActivePolls(){try{const polls=await api('/polls/active'); if(polls[0])renderPoll(polls[0]);}catch{}}
+
 function connectSocket(){
 
 try{
@@ -2435,6 +2485,12 @@ JSON.parse(event.data);
 if(message.type === "dev_effect"){
   applyDevEffect(message.effect);
 }
+if(message.type === "poll_new"){ renderPoll(message.poll); }
+if(message.type === "poll_update"){
+  document.querySelectorAll('#pollOptions .poll-option').forEach((b,i)=>{ const c=b.querySelector('[data-count]'); if(c)c.textContent=Number(message.votes?.[i]||0); b.classList.toggle('selected',message.myVote===i); });
+}
+if(message.type === "live_location") showLiveLocation(message);
+if(message.type === "streak_update"){ loadUser(); if(activeFriend&&message.from===activeFriend.uid) activeFriend.streak=message.streak; }
 
 if(message.type === "friend_request"){
   showFriendRequestToast(message.from||'Someone',message.uid||'');
@@ -2520,6 +2576,7 @@ location.reload();
 if(token){
 
 loadUser();
+loadActivePolls();
 
 }
 else{
@@ -2676,7 +2733,7 @@ async function openFriendOptions(){
 }
 async function removeFriend(uid){
   if(!confirm('Remove this friend?'))return;
-  try{await api('/friends/'+uid,{method:'DELETE'});activeFriend=null;closeModal();await loadUser();$('friendName').textContent='Felix Chat';$('friendStatus').textContent='Choose a friend';$('callActions').style.display='none';$('messages').innerHTML='<div class="empty">Choose a friend to start chatting.</div>'}catch(e){alert(e.message)}
+  try{await api('/friends/'+uid,{method:'DELETE'});activeFriend=null;closeModal();await loadUser();$('friendName').textContent='Felix Chat';$('friendStatus').textContent='Choose a friend';$('callActions').style.display='none';$('locationBtn').style.display='none';stopLiveLocation();$('messages').innerHTML='<div class="empty">Choose a friend to start chatting.</div>'}catch(e){alert(e.message)}
 }
 async function blockFriend(uid){
   if(!confirm('Block this user? They will also be removed from your friends.'))return;
