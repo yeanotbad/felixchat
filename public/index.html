@@ -1325,6 +1325,9 @@ button:focus-visible,input:focus-visible{
 .avatar{overflow:hidden;position:relative}.avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .call-actions{display:flex;gap:6px;margin-left:auto}.call-btn{width:auto;min-width:42px;height:36px;padding:0 10px;border-radius:10px;background:#171d35;border:1px solid #354264;color:#fff;font-weight:800}.call-btn.video{background:linear-gradient(135deg,#8b5cf6,#ec4899);border-color:transparent}
 .call-overlay{position:fixed;inset:0;z-index:20000;background:rgba(5,7,16,.94);backdrop-filter:blur(18px);display:none;align-items:center;justify-content:center;padding:18px}.call-card{width:min(720px,100%);background:#11162a;border:1px solid #354264;border-radius:24px;padding:18px;box-shadow:0 25px 80px #000b;display:flex;flex-direction:column;gap:12px}.call-title{font-size:20px;font-weight:900}.call-sub{color:#9aa6c2;font-size:13px}.call-video-stage{position:relative;background:#05070d;border-radius:18px;overflow:hidden;min-height:260px;aspect-ratio:16/9}.call-video-stage video{width:100%;height:100%;object-fit:contain;background:#05070d}.call-video-stage #localVideo{position:absolute;right:12px;bottom:12px;width:26%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff4;border-radius:14px;display:none}.call-audio-icon{font-size:64px;text-align:center;padding:70px 0}.call-controls,.incoming-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.call-control{padding:11px 18px;border-radius:12px;background:#202946;color:#fff;border:1px solid #3a4769;font-weight:800}.call-control.end{background:#d83f5d;border-color:#d83f5d}.profile-upload{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed #3a4769;border-radius:12px;background:#0d1322}
+.call-filters-panel{display:none;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;padding:10px;border:1px solid #354264;border-radius:14px;background:#0d1322}.call-filters-panel button{padding:9px 6px;border-radius:10px;background:#1b2742;color:#fff;border:1px solid #354264;font-weight:700;cursor:pointer}.call-filters-panel button.active{background:#6d4aff;border-color:#8b7cff}.call-filter-note{grid-column:1/-1;color:#9aa6c2;font-size:11px;text-align:center}
+@media(max-width:700px){.call-filters-panel{grid-template-columns:repeat(2,minmax(0,1fr));max-height:32vh;overflow:auto}}
+
 .streak-badge{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:#ff8a45;font-weight:800} .streak-formed-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:30000;pointer-events:none}.streak-formed-card{background:#111827;color:#fff;border:1px solid #ff8a45;border-radius:18px;padding:18px 26px;font-weight:800;font-size:22px;box-shadow:0 18px 60px #0008;animation:streakPop 2.4s ease forwards}.streak-formed-fire{font-size:38px;display:block;text-align:center;margin-bottom:4px}@keyframes streakPop{0%{opacity:0;transform:scale(.5) translateY(20px)}20%{opacity:1;transform:scale(1.08) translateY(0)}75%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.95) translateY(-20px)}}.streak-badge.active{color:#ff6b35}.live-location-card{position:fixed;right:18px;bottom:18px;z-index:18000;background:#11182b;border:1px solid #34415d;border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px #0008;max-width:300px}.poll-overlay{position:fixed;inset:0;z-index:17000;background:#05070dcc;display:none;align-items:center;justify-content:center;padding:18px}.poll-card{width:min(520px,100%);background:#11182b;border:1px solid #34415d;border-radius:20px;padding:20px;box-shadow:0 24px 70px #0009}.poll-option{display:block;width:100%;text-align:left;background:#19233a;color:#fff;border:1px solid #354264;border-radius:12px;padding:12px;margin:8px 0;cursor:pointer}.poll-option:hover{background:#233150}.poll-option.selected{border-color:#6c8cff;background:#24345a}.poll-count{float:right;color:#9aa6c2;font-size:12px}
 
 @media(max-width:700px){.call-btn{width:40px;min-width:40px;padding:0}.call-btn span{display:none}.chat-header .profile{min-width:0}.call-card{border-radius:18px;padding:12px}.call-video-stage{min-height:220px}.call-control{min-height:44px}}
@@ -2822,13 +2825,80 @@ setInterval(()=>{if(me)syncAdminButton()},1500);
 <div id="callOverlay" class="call-overlay"><div class="call-card"><div><div id="callTitle" class="call-title">Call</div><div id="callSub" class="call-sub">Connecting…</div></div><div class="call-video-stage"><div id="callAudioIcon" class="call-audio-icon">📞</div><video id="remoteVideo" autoplay playsinline style="display:none"></video><video id="localVideo" autoplay muted playsinline></video></div><div id="incomingActions" class="incoming-actions" style="display:none"><button class="call-control" onclick="acceptIncomingCall()">✅ Accept</button><button class="call-control end" onclick="rejectIncomingCall()">✕ Decline</button></div><div id="callControls" class="call-controls">
 <button id="muteCallBtn" class="call-control" onclick="toggleCallMute()">Mute microphone</button>
 <button id="cameraCallBtn" class="call-control" onclick="toggleCallCamera()" style="display:none">Turn off camera</button>
+<button id="callFiltersBtn" class="call-control" onclick="toggleCallFilters()" style="display:none">Filters</button>
 <button class="call-control end" onclick="endCall()">End call</button>
+</div><div id="callFiltersPanel" class="call-filters-panel" style="display:none"></div>
 </div></div></div>
 
 <script>
 /* REAL WEBRTC CALLING — uses the existing authenticated WebSocket for signaling. */
 let callPC=null,callStream=null,callRemoteStream=null,callMode='audio',callId=null,callPeer=null,callIncomingOffer=null,callState='idle',callPendingIce=[];
 let callMuted=false,callCameraOff=false;
+let callRawStream=null,callFilterCanvas=null,callFilterCtx=null,callFilterRAF=null,callFilterName='none',callFilterSource=null,callFilterStream=null;
+const CALL_FILTERS=[
+  ['none','Normal'],['dino','Dinosaur'],['glasses','Silly Glasses'],['moustache','Big Moustache'],['ears','Funny Ears'],['clown','Clown Face'],['robot','Robot'],['alien','Alien'],['pixel','Pixel Face'],['party','Party Face']
+];
+function buildCallFilters(){
+  const panel=$('callFiltersPanel'); if(!panel||panel.dataset.ready)return;
+  panel.dataset.ready='1';
+  CALL_FILTERS.forEach(([id,label])=>{const b=document.createElement('button');b.type='button';b.dataset.filter=id;b.textContent=label;b.onclick=()=>setCallFilter(id);panel.appendChild(b);});
+  const n=document.createElement('div');n.className='call-filter-note';n.textContent='Filters affect the video you send and your preview.';panel.appendChild(n);
+}
+function toggleCallFilters(){
+  if(callMode!=='video')return; buildCallFilters(); const p=$('callFiltersPanel'); p.style.display=p.style.display==='grid'?'none':'grid';
+}
+function setCallFilter(name){
+  callFilterName=name||'none';
+  document.querySelectorAll('#callFiltersPanel button[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===callFilterName));
+}
+function drawSticker(ctx,w,h,type){
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+  if(type==='dino'){ctx.font=Math.max(48,w*.13)+'px serif';ctx.fillText('🦖',w*.2,h*.22);ctx.fillText('🦖',w*.8,h*.22);ctx.font=Math.max(70,w*.18)+'px serif';ctx.fillText('🦖',w*.5,h*.86);}
+  if(type==='glasses'){ctx.font=Math.max(50,w*.12)+'px serif';ctx.fillText('🕶️',w*.5,h*.43);}
+  if(type==='moustache'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🥸',w*.5,h*.58);}
+  if(type==='ears'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🐰',w*.18,h*.2);ctx.fillText('🐰',w*.82,h*.2);}
+  if(type==='clown'){ctx.font=Math.max(60,w*.15)+'px serif';ctx.fillText('🤡',w*.5,h*.52);}
+  if(type==='robot'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🤖',w*.5,h*.22);ctx.strokeStyle='#00e5ff';ctx.lineWidth=5;ctx.strokeRect(w*.3,h*.22,w*.4,h*.5);}
+  if(type==='alien'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('👽',w*.5,h*.23);}
+  if(type==='pixel'){ctx.fillStyle='#00ff88';ctx.globalAlpha=.35;for(let y=0;y<h;y+=12)for(let x=0;x<w;x+=12)ctx.fillRect(x,y,6,6);ctx.globalAlpha=1;ctx.font='700 '+Math.max(30,w*.07)+'px sans-serif';ctx.fillStyle='#fff';ctx.fillText('PIXEL MODE',w*.5,h*.9);}
+  if(type==='party'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🎉',w*.18,h*.18);ctx.fillText('🎉',w*.82,h*.18);ctx.fillText('🎉',w*.5,h*.82);}
+  ctx.restore();
+}
+function startCallFilterPipeline(){
+  if(callMode!=='video'||!callRawStream)return callRawStream;
+  const source=document.createElement('video'); source.muted=true; source.playsInline=true; source.autoplay=true; source.srcObject=callRawStream; source.style.display='none'; document.body.appendChild(source); callFilterSource=source;
+  const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=480; callFilterCanvas=canvas; callFilterCtx=canvas.getContext('2d');
+  callFilterStream=canvas.captureStream(30);
+  const draw=()=>{
+    if(!callRawStream||!callFilterCtx)return;
+    const w=canvas.width,h=canvas.height;
+    callFilterCtx.save();
+    if(callFilterName==='robot')callFilterCtx.filter='grayscale(1) contrast(1.35)';
+    else if(callFilterName==='alien')callFilterCtx.filter='hue-rotate(75deg) saturate(1.7)';
+    else if(callFilterName==='pixel')callFilterCtx.filter='contrast(1.25) saturate(1.5)';
+    else if(callFilterName==='party')callFilterCtx.filter='saturate(1.8) contrast(1.1)';
+    else callFilterCtx.filter='none';
+    callFilterCtx.drawImage(source,0,0,w,h); callFilterCtx.filter='none';
+    drawSticker(callFilterCtx,w,h,callFilterName); callFilterCtx.restore();
+    callFilterRAF=requestAnimationFrame(draw);
+  };
+  source.play().catch(()=>{}); draw();
+  if($('localVideo'))$('localVideo').srcObject=callFilterStream;
+  return callFilterStream;
+}
+function stopCallFilterPipeline(){
+  if(callFilterRAF)cancelAnimationFrame(callFilterRAF); callFilterRAF=null;
+  callFilterStream?.getTracks().forEach(t=>t.stop()); callFilterStream=null;
+  if(callFilterSource){try{callFilterSource.srcObject=null;callFilterSource.remove()}catch{} callFilterSource=null;}
+  callFilterCanvas=null; callFilterCtx=null;
+}
+function makeCallStream(raw){
+  if(callMode!=='video')return raw;
+  const filtered=startCallFilterPipeline();
+  const out=new MediaStream(); raw.getAudioTracks().forEach(t=>out.addTrack(t)); filtered.getVideoTracks().forEach(t=>out.addTrack(t));
+  return out;
+}
+
 function updateCallControlLabels(){
   const m=$('muteCallBtn'), c=$('cameraCallBtn');
   if(m)m.textContent=callMuted?'Unmute microphone':'Mute microphone';
@@ -2837,13 +2907,13 @@ function updateCallControlLabels(){
 function toggleCallMute(){
   if(!callStream)return;
   callMuted=!callMuted;
-  callStream.getAudioTracks().forEach(t=>t.enabled=!callMuted);
+  (callRawStream||callStream).getAudioTracks().forEach(t=>t.enabled=!callMuted);
   updateCallControlLabels();
 }
 function toggleCallCamera(){
   if(!callStream || callMode!=='video')return;
   callCameraOff=!callCameraOff;
-  callStream.getVideoTracks().forEach(t=>t.enabled=!callCameraOff);
+  (callRawStream||callStream).getVideoTracks().forEach(t=>t.enabled=!callCameraOff);
   updateCallControlLabels();
 }
 
@@ -2861,6 +2931,9 @@ function showCallOverlay(title,sub,incoming=false){
   $('callAudioIcon').style.display=callMode==='audio'?'flex':'none';
   $('remoteVideo').style.display=callMode==='video'?'block':'none';
   $('localVideo').style.display=callMode==='video'?'block':'none';
+  $('callFiltersBtn').style.display=callMode==='video'&&!incoming?'inline-block':'none';
+  $('callFiltersPanel').style.display='none';
+  buildCallFilters();
 }
 async function startCall(mode){
   if(!activeFriend)return alert('Choose a friend first.');
@@ -2868,8 +2941,9 @@ async function startCall(mode){
   if(!navigator.mediaDevices?.getUserMedia)return alert('Calling requires a secure HTTPS connection and a supported browser.');
   callMode=mode;callPeer=activeFriend.uid;callId=Math.random().toString(36).slice(2);callState='outgoing';callMuted=false;callCameraOff=false;
   try{
-    callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:mode==='video'});
-    $('localVideo').srcObject=callStream;
+    callRawStream=await navigator.mediaDevices.getUserMedia({audio:true,video:mode==='video'});
+    callStream=makeCallStream(callRawStream);
+    if(mode==='video') $('localVideo').srcObject=callStream; else $('localVideo').srcObject=null;
     updateCallControlLabels();
     showCallOverlay(mode==='video'?'📹 Video call':'📞 Voice call','Calling @'+activeFriend.username+'…');
     sendCallSignal('call_invite',{callId});
@@ -2907,8 +2981,9 @@ async function acceptIncomingCall(){
   if(!callIncomingOffer)return;
   try{
     callState='incoming';
-    callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:callMode==='video'});
-    $('localVideo').srcObject=callStream;
+    callRawStream=await navigator.mediaDevices.getUserMedia({audio:true,video:callMode==='video'});
+    callStream=makeCallStream(callRawStream);
+    if(callMode==='video') $('localVideo').srcObject=callStream; else $('localVideo').srcObject=null;
     updateCallControlLabels();
     await createCallPeer();
     await callPC.setRemoteDescription(new RTCSessionDescription(callIncomingOffer.sdp));
@@ -2934,7 +3009,8 @@ function cleanupCall(){
   try{callPC?.close()}catch{}
   callPC=null;
   callStream?.getTracks().forEach(t=>t.stop());
-  callStream=null;
+  callRawStream?.getTracks().forEach(t=>t.stop());
+  callStream=null; callRawStream=null; stopCallFilterPipeline(); callFilterName='none';
   callRemoteStream=null;
   callIncomingOffer=null;
   callPendingIce=[];
