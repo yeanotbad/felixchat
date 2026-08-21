@@ -2836,13 +2836,13 @@ let callPC=null,callStream=null,callRemoteStream=null,callMode='audio',callId=nu
 let callMuted=false,callCameraOff=false;
 let callRawStream=null,callFilterCanvas=null,callFilterCtx=null,callFilterRAF=null,callFilterName='none',callFilterSource=null,callFilterStream=null;
 const CALL_FILTERS=[
-  ['none','Normal'],['dino','Dinosaur'],['glasses','Silly Glasses'],['moustache','Big Moustache'],['ears','Funny Ears'],['clown','Clown Face'],['robot','Robot'],['alien','Alien'],['pixel','Pixel Face'],['party','Party Face']
+  ['none','Normal'],['dino','Dinosaur'],['glasses','Glasses'],['moustache','Moustache'],['ears','Funny Ears'],['clown','Clown'],['robot','Robot'],['alien','Alien'],['pixel','Pixel'],['party','Party Face']
 ];
 function buildCallFilters(){
   const panel=$('callFiltersPanel'); if(!panel||panel.dataset.ready)return;
   panel.dataset.ready='1';
   CALL_FILTERS.forEach(([id,label])=>{const b=document.createElement('button');b.type='button';b.dataset.filter=id;b.textContent=label;b.onclick=()=>setCallFilter(id);panel.appendChild(b);});
-  const n=document.createElement('div');n.className='call-filter-note';n.textContent='Filters affect the video you send and your preview.';panel.appendChild(n);
+  const n=document.createElement('div');n.className='call-filter-note';n.textContent='Face tracking filters are applied to the video you send.';panel.appendChild(n);
 }
 function toggleCallFilters(){
   if(callMode!=='video')return; buildCallFilters(); const p=$('callFiltersPanel'); p.style.display=p.style.display==='grid'?'none':'grid';
@@ -2851,52 +2851,96 @@ function setCallFilter(name){
   callFilterName=name||'none';
   document.querySelectorAll('#callFiltersPanel button[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===callFilterName));
 }
-function drawSticker(ctx,w,h,type){
-  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
-  if(type==='dino'){ctx.font=Math.max(48,w*.13)+'px serif';ctx.fillText('🦖',w*.2,h*.22);ctx.fillText('🦖',w*.8,h*.22);ctx.font=Math.max(70,w*.18)+'px serif';ctx.fillText('🦖',w*.5,h*.86);}
-  if(type==='glasses'){ctx.font=Math.max(50,w*.12)+'px serif';ctx.fillText('🕶️',w*.5,h*.43);}
-  if(type==='moustache'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🥸',w*.5,h*.58);}
-  if(type==='ears'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🐰',w*.18,h*.2);ctx.fillText('🐰',w*.82,h*.2);}
-  if(type==='clown'){ctx.font=Math.max(60,w*.15)+'px serif';ctx.fillText('🤡',w*.5,h*.52);}
-  if(type==='robot'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🤖',w*.5,h*.22);ctx.strokeStyle='#00e5ff';ctx.lineWidth=5;ctx.strokeRect(w*.3,h*.22,w*.4,h*.5);}
-  if(type==='alien'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('👽',w*.5,h*.23);}
-  if(type==='pixel'){ctx.fillStyle='#00ff88';ctx.globalAlpha=.35;for(let y=0;y<h;y+=12)for(let x=0;x<w;x+=12)ctx.fillRect(x,y,6,6);ctx.globalAlpha=1;ctx.font='700 '+Math.max(30,w*.07)+'px sans-serif';ctx.fillStyle='#fff';ctx.fillText('PIXEL MODE',w*.5,h*.9);}
-  if(type==='party'){ctx.font=Math.max(55,w*.14)+'px serif';ctx.fillText('🎉',w*.18,h*.18);ctx.fillText('🎉',w*.82,h*.18);ctx.fillText('🎉',w*.5,h*.82);}
+
+/* Face-tracked call filters. MediaPipe FaceMesh is loaded only for video calls. */
+let faceMesh=null,faceLandmarks=null,faceMeshLoading=null,faceMeshBusy=false;
+function loadFaceMesh(){
+  if(faceMesh)return Promise.resolve(faceMesh);
+  if(faceMeshLoading)return faceMeshLoading;
+  faceMeshLoading=new Promise((resolve,reject)=>{
+    if(window.FaceMesh){initFaceMesh();return resolve(faceMesh);}
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js';
+    sc.onload=()=>{initFaceMesh();resolve(faceMesh)};
+    sc.onerror=reject; document.head.appendChild(sc);
+  });
+  return faceMeshLoading;
+}
+function initFaceMesh(){
+  if(faceMesh||!window.FaceMesh)return;
+  faceMesh=new FaceMesh({locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+  faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.55,minTrackingConfidence:.55});
+  faceMesh.onResults(r=>{faceLandmarks=r.multiFaceLandmarks?.[0]||null;faceMeshBusy=false;});
+}
+function pt(lm,w,h){return {x:lm.x*w,y:lm.y*h};}
+function faceBox(lm,w,h){
+  const ids=[10,152,234,454]; let minX=1,minY=1,maxX=0,maxY=0;
+  ids.forEach(i=>{const p=lm[i];minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y)});
+  return {x:minX*w,y:minY*h,w:(maxX-minX)*w,h:(maxY-minY)*h,cx:(minX+maxX)*w/2,cy:(minY+maxY)*h/2};
+}
+function ellipse(ctx,x,y,rx,ry,fill,stroke,lw=1){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke()}}
+function drawTrackedFilter(ctx,w,h,type,lm){
+  if(!lm)return;
+  const b=faceBox(lm,w,h), left=pt(lm[33],w,h), right=pt(lm[263],w,h), nose=pt(lm[1],w,h), mouth=pt(lm[13],w,h), chin=pt(lm[152],w,h);
+  const eyeL=pt(lm[159],w,h), eyeR=pt(lm[386],w,h), eyeDist=Math.hypot(eyeR.x-eyeL.x,eyeR.y-eyeL.y), faceW=b.w;
+  const angle=Math.atan2(eyeR.y-eyeL.y,eyeR.x-eyeL.x);
+  ctx.save(); ctx.translate(b.cx,b.cy); ctx.rotate(angle);
+  const fw=faceW, fh=b.h;
+  if(type==='glasses'){
+    ctx.fillStyle='rgba(20,20,25,.92)';ctx.strokeStyle='#d8e0ef';ctx.lineWidth=Math.max(2,fw*.012);
+    const gy=-fh*.05, gw=fw*.27, gh=fh*.14;
+    ctx.fillRect(-gw-gw*.08,gy-gh/2,gw,gh);ctx.fillRect(gw*.08,gy-gh/2,gw,gh);ctx.beginPath();ctx.moveTo(-gw*.08,gy);ctx.lineTo(gw*.08,gy);ctx.stroke();
+  } else if(type==='moustache'){
+    ctx.fillStyle='#171717';ellipse(ctx,-fw*.08,fh*.12,fw*.14,fh*.055,'#171717');ellipse(ctx,fw*.08,fh*.12,fw*.14,fh*.055,'#171717');
+  } else if(type==='ears'){
+    ctx.fillStyle='#d8a07c';ctx.strokeStyle='#8b5a44';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(-fw*.43,-fh*.38);ctx.lineTo(-fw*.62,-fh*.82);ctx.quadraticCurveTo(-fw*.48,-fh*.88,-fw*.28,-fh*.48);ctx.fill();ctx.stroke();
+    ctx.beginPath();ctx.moveTo(fw*.43,-fh*.38);ctx.lineTo(fw*.62,-fh*.82);ctx.quadraticCurveTo(fw*.48,-fh*.88,fw*.28,-fh*.48);ctx.fill();ctx.stroke();
+  } else if(type==='dino'){
+    ctx.fillStyle='rgba(67,184,92,.75)';ctx.strokeStyle='#b8f5b0';ctx.lineWidth=3;
+    ctx.beginPath();ctx.ellipse(0,0,fw*.55,fh*.58,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#f7f0d0';
+    for(let i=-3;i<=3;i++){ctx.beginPath();ctx.moveTo(i*fw*.10,fh*.42);ctx.lineTo(i*fw*.10+fw*.04,fh*.52);ctx.lineTo(i*fw*.08+fw*.08,fh*.42);ctx.fill()}
+    ctx.fillStyle='#d9f3c6';[[ -fw*.22,-fh*.16],[fw*.22,-fh*.16]].forEach(([x,y])=>ellipse(ctx,x,y,fw*.09,fh*.12,'#f4f7ff'));ctx.fillStyle='#111';ellipse(ctx,-fw*.22,-fh*.15,fw*.035,fh*.05,'#111');ellipse(ctx,fw*.22,-fh*.15,fw*.035,fh*.05,'#111');
+  } else if(type==='clown'){
+    ctx.fillStyle='rgba(255,255,255,.82)';ellipse(ctx,0,0,fw*.54,fh*.58,'rgba(255,255,255,.82)');
+    ellipse(ctx,-fw*.23,-fh*.05,fw*.09,fh*.12,'#111');ellipse(ctx,fw*.23,-fh*.05,fw*.09,fh*.12,'#111');ellipse(ctx,0,fh*.12,fw*.09,fh*.09,'#e33');
+    ctx.strokeStyle='#ff3b6b';ctx.lineWidth=fw*.025;ctx.beginPath();ctx.moveTo(-fw*.42,fh*.02);ctx.quadraticCurveTo(-fw*.25,-fh*.25,-fw*.05,-fh*.18);ctx.stroke();ctx.beginPath();ctx.moveTo(fw*.42,fh*.02);ctx.quadraticCurveTo(fw*.25,-fh*.25,fw*.05,-fh*.18);ctx.stroke();
+  } else if(type==='robot'){
+    ctx.fillStyle='rgba(95,105,125,.82)';ctx.strokeStyle='#d8e2ff';ctx.lineWidth=3;ctx.fillRect(-fw*.48,-fh*.5,fw*.96,fh*.92);ctx.strokeRect(-fw*.48,-fh*.5,fw*.96,fh*.92);ellipse(ctx,-fw*.22,-fh*.12,fw*.08,fh*.08,'#46eaff');ellipse(ctx,fw*.22,-fh*.12,fw*.08,fh*.08,'#46eaff');ctx.strokeStyle='#46eaff';ctx.beginPath();ctx.moveTo(-fw*.18,fh*.18);ctx.lineTo(fw*.18,fh*.18);ctx.stroke();
+  } else if(type==='alien'){
+    ctx.fillStyle='rgba(92,220,132,.58)';ellipse(ctx,0,0,fw*.57,fh*.61,'rgba(92,220,132,.58)');ellipse(ctx,-fw*.2,-fh*.08,fw*.13,fh*.22,'#111');ellipse(ctx,fw*.2,-fh*.08,fw*.13,fh*.22,'#111');
+  } else if(type==='pixel'){
+    ctx.globalAlpha=.55;ctx.fillStyle='#58ffb0';const sz=Math.max(8,fw*.035);for(let y=-fh*.55;y<fh*.55;y+=sz*2)for(let x=-fw*.55;x<fw*.55;x+=sz*2)ctx.fillRect(x,y,sz,sz);ctx.globalAlpha=1;
+  } else if(type==='party'){
+    ctx.fillStyle='#f04a7a';ctx.beginPath();ctx.moveTo(-fw*.5,-fh*.45);ctx.lineTo(0,-fh*.9);ctx.lineTo(fw*.5,-fh*.45);ctx.closePath();ctx.fill();ctx.strokeStyle='#ffd45a';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-fw*.15,-fh*.1);ctx.lineTo(fw*.15,-fh*.1);ctx.stroke();
+  }
   ctx.restore();
 }
 function startCallFilterPipeline(){
   if(callMode!=='video'||!callRawStream)return callRawStream;
   const source=document.createElement('video'); source.muted=true; source.playsInline=true; source.autoplay=true; source.srcObject=callRawStream; source.style.display='none'; document.body.appendChild(source); callFilterSource=source;
   const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=480; callFilterCanvas=canvas; callFilterCtx=canvas.getContext('2d');
-  callFilterStream=canvas.captureStream(30);
-  const draw=()=>{
+  callFilterStream=canvas.captureStream(30); loadFaceMesh().catch(()=>{});
+  let lastDetect=0;
+  const draw=async(t)=>{
     if(!callRawStream||!callFilterCtx)return;
-    const w=canvas.width,h=canvas.height;
-    callFilterCtx.save();
-    if(callFilterName==='robot')callFilterCtx.filter='grayscale(1) contrast(1.35)';
-    else if(callFilterName==='alien')callFilterCtx.filter='hue-rotate(75deg) saturate(1.7)';
-    else if(callFilterName==='pixel')callFilterCtx.filter='contrast(1.25) saturate(1.5)';
-    else if(callFilterName==='party')callFilterCtx.filter='saturate(1.8) contrast(1.1)';
-    else callFilterCtx.filter='none';
-    callFilterCtx.drawImage(source,0,0,w,h); callFilterCtx.filter='none';
-    drawSticker(callFilterCtx,w,h,callFilterName); callFilterCtx.restore();
-    callFilterRAF=requestAnimationFrame(draw);
+    const w=canvas.width,h=canvas.height; callFilterCtx.save(); callFilterCtx.filter='none'; callFilterCtx.drawImage(source,0,0,w,h);
+    if(faceMesh&&source.readyState>=2&&!faceMeshBusy&&t-lastDetect>70){faceMeshBusy=true;lastDetect=t;try{await faceMesh.send({image:source})}catch{faceMeshBusy=false}}
+    drawTrackedFilter(callFilterCtx,w,h,callFilterName,faceLandmarks); callFilterCtx.restore(); callFilterRAF=requestAnimationFrame(draw);
   };
-  source.play().catch(()=>{}); draw();
-  if($('localVideo'))$('localVideo').srcObject=callFilterStream;
-  return callFilterStream;
+  source.play().catch(()=>{}); callFilterRAF=requestAnimationFrame(draw);
+  if($('localVideo'))$('localVideo').srcObject=callFilterStream; return callFilterStream;
 }
 function stopCallFilterPipeline(){
-  if(callFilterRAF)cancelAnimationFrame(callFilterRAF); callFilterRAF=null;
+  if(callFilterRAF)cancelAnimationFrame(callFilterRAF); callFilterRAF=null; faceLandmarks=null; faceMeshBusy=false;
   callFilterStream?.getTracks().forEach(t=>t.stop()); callFilterStream=null;
   if(callFilterSource){try{callFilterSource.srcObject=null;callFilterSource.remove()}catch{} callFilterSource=null;}
   callFilterCanvas=null; callFilterCtx=null;
 }
 function makeCallStream(raw){
   if(callMode!=='video')return raw;
-  const filtered=startCallFilterPipeline();
-  const out=new MediaStream(); raw.getAudioTracks().forEach(t=>out.addTrack(t)); filtered.getVideoTracks().forEach(t=>out.addTrack(t));
-  return out;
+  const filtered=startCallFilterPipeline(); const out=new MediaStream(); raw.getAudioTracks().forEach(t=>out.addTrack(t)); filtered.getVideoTracks().forEach(t=>out.addTrack(t)); return out;
 }
 
 function updateCallControlLabels(){
