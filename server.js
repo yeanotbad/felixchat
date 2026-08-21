@@ -400,18 +400,20 @@ app.post('/api/admin/role/:uid',auth,async(req,res)=>{
   if(target.username==='felixchat')return res.status(400).json({error:'The FelixChat admin account always remains admin.'});
   const role=String(req.body.role||'member').toLowerCase();
   if(!['member','vip','mod'].includes(role))return res.status(400).json({error:'Role must be member, vip, or mod.'});
+  const oldRole=String(target.role||'member').toLowerCase();
   await db.execute({sql:'UPDATE users SET role=? WHERE uid=?',args:[role,req.params.uid]});
-  broadcast(req.params.uid,{type:'role_changed',role});
-  res.json({ok:true,role});
+  broadcast(req.params.uid,{type:'role_changed',role,oldRole});
+  res.json({ok:true,role,oldRole});
 });
 app.post('/api/admin/verified/:uid',auth,async(req,res)=>{
   if(!await requireAdmin(req,res))return;
   const target=await getUser(req.params.uid);
   if(!target)return res.status(404).json({error:'User not found'});
   const verified=!!req.body?.verified;
+  const oldVerified=Number(target.verified||0)===1;
   await db.execute({sql:'UPDATE users SET verified=? WHERE uid=?',args:[verified?1:0,req.params.uid]});
-  broadcast(req.params.uid,{type:'verified_changed',verified});
-  res.json({ok:true,verified});
+  broadcast(req.params.uid,{type:'verified_changed',verified,oldVerified});
+  res.json({ok:true,verified,oldVerified});
 });
 app.post('/api/admin/command',auth,async(req,res)=>{
   const isMod=await getRole(req.uid);
