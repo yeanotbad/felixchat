@@ -1313,7 +1313,7 @@ button:focus-visible,input:focus-visible{
 @keyframes devSpin{to{transform:rotate(360deg) scale(.96)}}
 .dev-effect-big{animation:devBig 1.1s ease-in-out}
 @keyframes devBig{50%{transform:scale(1.18)}}
-.dev-effect-invert{animation:devInvert 1.5s ease-in-out}
+.dev-effect-invert{animation:devInvert 1.5s ease-in-out}.dev-effect-toast{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:60000;background:#10182aee;border:1px solid #4c5e86;color:#fff;border-radius:14px;padding:10px 16px;font-weight:900;box-shadow:0 12px 35px #0008;pointer-events:none}
 @keyframes devInvert{50%{filter:invert(1) hue-rotate(180deg)}}
 .dev-confetti{position:fixed;inset:0;pointer-events:none;z-index:50000;overflow:hidden}
 .dev-confetti i{position:absolute;width:9px;height:14px;animation:fall 1.6s linear forwards}
@@ -2086,7 +2086,7 @@ async function selectFriend(friend){
 activeFriend =
 friend;
 
-$("friendName").innerHTML = '<span class="'+(friend.username==="felixchat"?"dev-name":"")+'">@' + escapeHtml(friend.username) + '</span>' + roleBadgeHTML(friend.role,friend.username);
+$("friendName").innerHTML = '<span class="'+(friend.username==="felixchat"?"dev-name":"")+'">@' + escapeHtml(friend.username) + '</span>' + roleBadgeHTML(friend.role,friend.username,friend.verified);
 
 setAvatar($("friendAvatar"),friend);
 $("callActions").style.display="flex";
@@ -2109,12 +2109,13 @@ loadMessages();
 
 /* MESSAGES — render once, then apply realtime events directly */
 
-function roleBadgeHTML(role,username){
+function roleBadgeHTML(role,username,verified=false){
   const r=String(role||'member').toLowerCase();
-  if(username==='felixchat' || r==='admin') return '<span class="role-badge dev-badge"><span class="verified-tick">✓</span> DEVELOPER</span>';
-  if(r==='mod') return '<span class="role-badge mod-badge">🛡️ MOD</span>';
-  if(r==='vip') return '<span class="role-badge vip-badge">⭐ VIP</span>';
-  return '';
+  const tick=verified ? '<span class="verified-tick">✓</span>' : '';
+  if(String(username||'').toLowerCase()==='felixchat') return '<span class="role-badge dev-badge"><span class="verified-tick">✓</span> DEVELOPER</span>';
+  if(r==='mod') return '<span class="role-badge mod-badge">🛡️ MOD</span>'+tick;
+  if(r==='vip') return '<span class="role-badge vip-badge">⭐ VIP</span>'+tick;
+  return tick;
 }
 function userRoleForMessage(message){
   if(message.from===me?.uid) return me?.role||'member';
@@ -2127,14 +2128,20 @@ function showDevConfetti(){
   document.body.appendChild(wrap); setTimeout(()=>wrap.remove(),2200);
 }
 function applyDevEffect(effect){
-  if(effect==='confetti'){showDevConfetti();return;}
-  const targets=[$('messages'),$('friendAvatar'),$('friendName')].filter(Boolean);
+  if(effect==='confetti'){showDevConfetti();showDevEffectToast(effect);return;}
+  const targets=[$('messages'),$('friendAvatar'),$('friendName'),document.querySelector('.chat')].filter(Boolean);
   const cls='dev-effect-'+effect;
   targets.forEach(el=>{el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);setTimeout(()=>el.classList.remove(cls),1700);});
+  showDevEffectToast(effect);
+}
+function showDevEffectToast(effect){
+  const old=document.querySelector('.dev-effect-toast'); if(old) old.remove();
+  const el=document.createElement('div'); el.className='dev-effect-toast'; el.textContent='⚡ Developer effect: '+String(effect).toUpperCase();
+  document.body.appendChild(el); setTimeout(()=>el.remove(),1800);
 }
 function openDevCommands(){
   if(!me || !['admin','mod'].includes(String(me.role||'').toLowerCase())) return;
-  const isDev=String(me.role||'').toLowerCase()==='admin';
+  const isDev=String(me.username||'').toLowerCase()==='felixchat' && String(me.role||'').toLowerCase()==='admin';
   const commands=isDev
     ? [['shake','🫨 Shake'],['rainbow','🌈 Rainbow'],['spin','🌀 Spin'],['confetti','🎉 Confetti'],['big','🔍 Big'],['invert','🌓 Invert']]
     : [['shake','🫨 Shake'],['rainbow','🌈 Rainbow']];
@@ -2158,7 +2165,7 @@ function messageBubble(message){
   if(senderName==="felixchat"){name.className="dev-name";}
   head.appendChild(name);
   const badge=document.createElement("span");
-  badge.innerHTML=roleBadgeHTML(role,senderName);
+  badge.innerHTML=roleBadgeHTML(role,senderName,(message.from===me?.uid?me?.verified:activeFriend?.verified));
   head.appendChild(badge.firstElementChild || badge);
   bubble.appendChild(head);
 
@@ -2448,7 +2455,8 @@ if(message.type === "group_typing"){
   if(activeGroup && message.uid!==me?.uid && message.typing){ const el=$('featureTypingIndicator'); if(el)el.textContent='Someone is typing…'; setTimeout(()=>{if(el)el.textContent=''},1200); }
 }
 if(message.type === "message" && browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid){ new Notification('Felix Chat',{body:(message.message?.text||'New message').slice(0,100)}); }
-if(message.type === "role_changed" || message.type === "banned"){
+if(message.type === "verified_changed"){ loadUser(); if(activeFriend && activeFriend.uid===me?.uid) activeFriend.verified=message.verified; }
+if(message.type === "role_changed" || message.type === "banned"){ 
   loadUser();
 }
 
@@ -2587,10 +2595,12 @@ async function refreshAdminUsers(){
       const roleLabel=role==='mod'?'🛡️ MOD':role==='vip'?'⭐ VIP':'Member';
       const banButton=u.username==='felixchat'?'':(u.banned?`<button class="btn primary" onclick="adminUnban('${u.uid}')">Unban</button>`:`<button class="btn" onclick="adminBan('${u.uid}','${escapeHtml(u.username)}')">Ban</button>`);
       const roleButton=canGrant && u.username!=='felixchat'?`<select class="input" style="width:auto;padding:7px" onchange="adminSetRole('${u.uid}',this.value)"><option value="member" ${role==='member'?'selected':''}>Member</option><option value="vip" ${role==='vip'?'selected':''}>VIP</option><option value="mod" ${role==='mod'?'selected':''}>Moderator</option></select>`:'';
-      return `<div class="request"><div class="avatar">${avatarMarkup(u)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)} <span class="role-badge">${roleLabel}</span></div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${roleButton}${banButton}</div>`;
+      const verifiedButton=canGrant && u.username!=='felixchat'?`<button class="btn ${u.verified?'primary':''}" onclick="adminSetVerified('${u.uid}',${!u.verified})">${u.verified?'✓ Verified':'☑ Verify'}</button>`:'';
+      return `<div class="request"><div class="avatar">${avatarMarkup(u)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)} <span class="role-badge">${roleLabel}</span></div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${roleButton}${verifiedButton}${banButton}</div>`;
     }).join('');
   }catch(e){box.innerHTML='<p class="small">'+escapeHtml(e.message)+'</p>';}
 }
+async function adminSetVerified(uid,verified){try{await api('/admin/verified/'+uid,{method:'POST',body:JSON.stringify({verified})});await refreshAdminUsers();await loadUser()}catch(e){alert(e.message)}}
 async function adminSetRole(uid,role){
   if(!confirm('Change this account to '+role+'?')){await refreshAdminUsers();return}
   try{await api('/admin/role/'+uid,{method:'POST',body:JSON.stringify({role})});await refreshAdminUsers();await loadUser()}catch(e){alert(e.message);await refreshAdminUsers()}
