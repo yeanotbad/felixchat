@@ -26,6 +26,28 @@ const clean = s => String(s ?? '').trim().slice(0, 32);
 const hash = (password, salt) => crypto.createHash('sha256').update(`${salt}:${password}`).digest('hex');
 const now = () => Date.now();
 const chatKey = (a, b) => [a, b].sort().join(':');
+const pairKey = (a,b) => [a,b].sort().join(':');
+const utcDay = (ms=Date.now()) => new Date(ms).toISOString().slice(0,10);
+async function touchFriendStreak(a,b){
+  if(!a||!b||a===b||!(await areFriends(a,b))) return null;
+  const key=pairKey(a,b), day=utcDay();
+  const r=await db.execute({sql:'SELECT * FROM friend_streaks WHERE pair_key=?',args:[key]});
+  const row=r.rows[0];
+  let streak=1;
+  if(row){
+    if(row.last_day===day) streak=Number(row.streak||1);
+    else {
+      const prev=new Date(row.last_day+'T00:00:00Z');
+      const cur=new Date(day+'T00:00:00Z');
+      const diff=Math.round((cur-prev)/86400000);
+      streak=diff===1?Number(row.streak||0)+1:1;
+    }
+    await db.execute({sql:'UPDATE friend_streaks SET streak=?,last_day=? WHERE pair_key=?',args:[streak,day,key]});
+  }else{
+    await db.execute({sql:'INSERT INTO friend_streaks(pair_key,user_a,user_b,streak,last_day) VALUES(?,?,?,?,?)',args:[key,...[a,b].sort(),1,day]});
+  }
+  return {pairKey:key,streak,lastDay:day};
+}
 
 async function init() {
   await db.batch([
@@ -44,7 +66,10 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS announcement_views (announcement_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(announcement_id, uid))`,
     `CREATE TABLE IF NOT EXISTS group_messages (id TEXT PRIMARY KEY, gid TEXT NOT NULL, sender_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', created_at INTEGER NOT NULL, edited INTEGER DEFAULT 0)`,
     `CREATE INDEX IF NOT EXISTS idx_group_messages_time ON group_messages(gid, created_at)`,
-    `CREATE TABLE IF NOT EXISTS pinned_messages (message_id TEXT PRIMARY KEY, chat_key TEXT NOT NULL, pinned_by TEXT NOT NULL, pinned_at INTEGER NOT NULL)`
+    `CREATE TABLE IF NOT EXISTS pinned_messages (message_id TEXT PRIMARY KEY, chat_key TEXT NOT NULL, pinned_by TEXT NOT NULL, pinned_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS friend_streaks (pair_key TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, streak INTEGER DEFAULT 0, last_day TEXT DEFAULT '')`,
+    `CREATE TABLE IF NOT EXISTS polls (id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, question TEXT NOT NULL, options_json TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS poll_votes (poll_id TEXT NOT NULL, uid TEXT NOT NULL, option_index INTEGER NOT NULL, voted_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -150,7 +175,8 @@ app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
-  res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,friends:fr.rows.map(x=>publicUser(x,(sockets.get(x.uid)?.size||0)>0)),requests:incoming.rows.map(x=>publicUser(x))});
+  const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); f.streak=Number(sr.rows[0]?.streak||0); f.streakLastDay=sr.rows[0]?.last_day||''; friends.push(f); }
+  res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,friends,requests:incoming.rows.map(x=>publicUser(x))});
 });
 
 const upload=multer({storage:multer.diskStorage({destination:(_r,_f,cb)=>cb(null,UPLOADS),filename:(_r,file,cb)=>cb(null,id()+path.extname(file.originalname||'').toLowerCase().slice(0,10))}),limits:{fileSize:50*1024*1024}});
@@ -240,13 +266,54 @@ app.post('/api/dev-command',auth,async(req,res)=>{
   }catch(e){console.error(e);res.status(500).json({error:'Command failed'});}
 });
 
+app.get('/api/streaks',auth,async(req,res)=>{
+  const r=await db.execute({sql:'SELECT * FROM friend_streaks WHERE user_a=? OR user_b=? ORDER BY streak DESC',args:[req.uid,req.uid]});
+  const out=[]; for(const x of r.rows){ const other=x.user_a===req.uid?x.user_b:x.user_a; const u=await getUser(other); if(u) out.push({uid:other,username:u.username,streak:Number(x.streak||0),lastDay:x.last_day}); }
+  res.json(out);
+});
+app.post('/api/dev/streak-restore',auth,async(req,res)=>{
+  const actor=await getUser(req.uid); if(String(actor?.username||'').toLowerCase()!=='felixchat') return res.status(403).json({error:'Developer access required'});
+  const target=await getUser(String(req.body.targetUid||'')); if(!target) return res.status(404).json({error:'User not found'});
+  if(!await areFriends(req.uid,target.uid)) return res.status(400).json({error:'You can only restore a streak for a friend of the developer account'});
+  const key=pairKey(req.uid,target.uid), r=await db.execute({sql:'SELECT * FROM friend_streaks WHERE pair_key=?',args:[key]});
+  if(r.rows[0]) await db.execute({sql:'UPDATE friend_streaks SET streak=?,last_day=? WHERE pair_key=?',args:[Math.max(1,Number(req.body.streak||r.rows[0].streak||1)),utcDay(),key]});
+  else await db.execute({sql:'INSERT INTO friend_streaks(pair_key,user_a,user_b,streak,last_day) VALUES(?,?,?,?,?)',args:[key,...[req.uid,target.uid].sort(),Math.max(1,Number(req.body.streak||1)),utcDay()]});
+  const value=await db.execute({sql:'SELECT * FROM friend_streaks WHERE pair_key=?',args:[key]});
+  pair(req.uid,target.uid,{type:'streak_update',streak:Number(value.rows[0].streak||1),lastDay:value.rows[0].last_day});
+  res.json({ok:true,streak:Number(value.rows[0].streak||1)});
+});
+app.post('/api/dev/poll',auth,async(req,res)=>{
+  const actor=await getUser(req.uid); if(String(actor?.username||'').toLowerCase()!=='felixchat') return res.status(403).json({error:'Developer access required'});
+  const question=String(req.body.question||'').trim().slice(0,200);
+  const options=Array.isArray(req.body.options)?req.body.options.map(x=>String(x).trim().slice(0,80)).filter(Boolean).slice(0,8):[];
+  if(!question||options.length<2) return res.status(400).json({error:'Poll needs a question and at least 2 options'});
+  const poll={id:id(),question,options,createdAt:now(),expiresAt:now()+86400000,creator:actor.username};
+  await db.execute({sql:'INSERT INTO polls(id,creator_id,question,options_json,created_at,expires_at) VALUES(?,?,?,?,?,?)',args:[poll.id,req.uid,poll.question,JSON.stringify(poll.options),poll.createdAt,poll.expiresAt]});
+  for(const uid of sockets.keys()) broadcast(uid,{type:'poll_new',poll});
+  res.json({ok:true,poll});
+});
+app.get('/api/polls/active',auth,async(req,res)=>{
+  const r=await db.execute({sql:'SELECT * FROM polls WHERE expires_at>? ORDER BY created_at DESC LIMIT 20',args:[now()]});
+  const out=[]; for(const x of r.rows){const v=await db.execute({sql:'SELECT option_index,COUNT(*) count FROM poll_votes WHERE poll_id=? GROUP BY option_index',args:[x.id]}); const mine=await db.execute({sql:'SELECT option_index FROM poll_votes WHERE poll_id=? AND uid=?',args:[x.id,req.uid]}); out.push({id:x.id,question:x.question,options:JSON.parse(x.options_json||'[]'),createdAt:x.created_at,expiresAt:x.expires_at,votes:Object.fromEntries(v.rows.map(z=>[z.option_index,Number(z.count)])),myVote:mine.rows[0]?.option_index??null});} res.json(out);
+});
+app.post('/api/polls/:id/vote',auth,async(req,res)=>{
+  const idx=Number(req.body.optionIndex); const p=await db.execute({sql:'SELECT * FROM polls WHERE id=? AND expires_at>?',args:[req.params.id,now()]}); if(!p.rows[0]) return res.status(404).json({error:'Poll not found'});
+  const opts=JSON.parse(p.rows[0].options_json||'[]'); if(!Number.isInteger(idx)||idx<0||idx>=opts.length)return res.status(400).json({error:'Invalid option'});
+  await db.execute({sql:'INSERT INTO poll_votes(poll_id,uid,option_index,voted_at) VALUES(?,?,?,?) ON CONFLICT(poll_id,uid) DO UPDATE SET option_index=excluded.option_index,voted_at=excluded.voted_at',args:[req.params.id,req.uid,idx,now()]});
+  const v=await db.execute({sql:'SELECT option_index,COUNT(*) count FROM poll_votes WHERE poll_id=? GROUP BY option_index',args:[req.params.id]}); const payload={type:'poll_update',pollId:req.params.id,votes:Object.fromEntries(v.rows.map(z=>[z.option_index,Number(z.count)])),myVote:idx};
+  for(const uid of sockets.keys()) broadcast(uid,payload); res.json(payload);
+});
+
 app.get('/api/messages/:uid',auth,async(req,res)=>{if(!await areFriends(req.uid,req.params.uid))return res.status(403).json({error:'Not friends'});const r=await db.execute({sql:`SELECT * FROM messages WHERE chat_key=? AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at`,args:[chatKey(req.uid,req.params.uid),now()]});const out=[];for(const row of r.rows){const m=messageRow(row);const rr=await db.execute({sql:'SELECT uid,emoji FROM reactions WHERE message_id=? ORDER BY created_at',args:[m.id]});m.reactions=rr.rows;out.push(m)}res.json(out);});
 app.post('/api/messages/:uid',auth,async(req,res)=>{
   const other=req.params.uid;if(!await areFriends(req.uid,other))return res.status(403).json({error:'Not friends'});if(await blocked(req.uid,other)||await blocked(other,req.uid))return res.status(403).json({error:'Messaging unavailable'});
   const text=String(req.body.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'Empty message'});
   const m={id:id(),from:req.uid,to:other,text,kind:'text',url:'',name:'',mime:'',time:now(),readAt:null,expiresAt:req.body.disappearing?now()+86400000:null,replyTo:req.body.replyTo||null,edited:false};
   await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,created_at,expires_at,reply_to) VALUES(?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,m.text,'text',m.time,m.expiresAt,m.replyTo]});
-  broadcast(other,{type:'message',message:m});res.json(m);
+  broadcast(other,{type:'message',message:m});
+  const streak=await touchFriendStreak(req.uid,other);
+  if(streak) pair(req.uid,other,{type:'streak_update',streak:streak.streak,lastDay:streak.lastDay});
+  res.json(m);
 });
 app.patch('/api/messages/:uid/:messageId',auth,async(req,res)=>{const text=String(req.body.text||'').trim().slice(0,4000);const r=await db.execute({sql:'SELECT * FROM messages WHERE id=? AND sender_id=?',args:[req.params.messageId,req.uid]});if(!r.rows[0])return res.status(404).json({error:'Message not found'});await db.execute({sql:'UPDATE messages SET text=?, edited=1 WHERE id=?',args:[text,req.params.messageId]});const m=messageRow({...r.rows[0],text,edited:1});pair(req.uid,r.rows[0].receiver_id,{type:'message_edited',message:m});res.json(m);});
 app.post('/api/messages/:uid/:messageId/read',auth,async(req,res)=>{await db.execute({sql:'UPDATE messages SET read_at=? WHERE id=? AND receiver_id=?',args:[now(),req.params.messageId,req.uid]});const r=await db.execute({sql:'SELECT sender_id FROM messages WHERE id=?',args:[req.params.messageId]});if(r.rows[0])broadcast(r.rows[0].sender_id,{type:'message_read',messageId:req.params.messageId,at:now()});res.json({ok:true});});
@@ -432,8 +499,12 @@ app.post('/api/groups/:gid/members',auth,async(req,res)=>{const other=req.body.u
 
 wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));
         try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(!(a.audience==='all'||ts.includes(uid)))continue;const seen=await db.execute({sql:'SELECT 1 FROM announcement_views WHERE announcement_id=? AND uid=?',args:[a.id,uid]});if(seen.rows.length)continue;const announcement={id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username};ws.send(JSON.stringify({type:'announcement',announcement}));await db.execute({sql:'INSERT OR IGNORE INTO announcement_views(announcement_id,uid,viewed_at) VALUES(?,?,?)',args:[a.id,uid,now()]});break;}}catch(e){}
-        return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});if(uid&&m.type==='group_typing'&&m.gid&&await groupMember(m.gid,uid))await broadcastGroup(m.gid,{type:'group_typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
+        return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});
+        if(uid&&m.type==='live_location'&&m.to&&await areFriends(uid,m.to)){
+          const p=m.payload||{}; const lat=Number(p.lat),lon=Number(p.lon);
+          if(Number.isFinite(lat)&&Number.isFinite(lon)) broadcast(m.to,{type:'live_location',from:uid,payload:{lat,lon,accuracy:Number(p.accuracy)||0,active:p.active!==false,at:Date.now()}});
+        }if(uid&&m.type==='group_typing'&&m.gid&&await groupMember(m.gid,uid))await broadcastGroup(m.gid,{type:'group_typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
 
-setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
+setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM polls WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
 init().then(()=>server.listen(PORT,()=>console.log('Felix Chat running on '+PORT))).catch(e=>{console.error('DB init failed',e);process.exit(1);});
