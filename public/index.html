@@ -1324,7 +1324,7 @@ button:focus-visible,input:focus-visible{
 .avatar{overflow:hidden;position:relative}.avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .call-actions{display:flex;gap:6px;margin-left:auto}.call-btn{width:auto;min-width:42px;height:36px;padding:0 10px;border-radius:10px;background:#171d35;border:1px solid #354264;color:#fff;font-weight:800}.call-btn.video{background:linear-gradient(135deg,#8b5cf6,#ec4899);border-color:transparent}
 .call-overlay{position:fixed;inset:0;z-index:20000;background:rgba(5,7,16,.94);backdrop-filter:blur(18px);display:none;align-items:center;justify-content:center;padding:18px}.call-card{width:min(720px,100%);background:#11162a;border:1px solid #354264;border-radius:24px;padding:18px;box-shadow:0 25px 80px #000b;display:flex;flex-direction:column;gap:12px}.call-title{font-size:20px;font-weight:900}.call-sub{color:#9aa6c2;font-size:13px}.call-video-stage{position:relative;background:#05070d;border-radius:18px;overflow:hidden;min-height:260px;aspect-ratio:16/9}.call-video-stage video{width:100%;height:100%;object-fit:contain;background:#05070d}.call-video-stage #localVideo{position:absolute;right:12px;bottom:12px;width:26%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff4;border-radius:14px;display:none}.call-audio-icon{font-size:64px;text-align:center;padding:70px 0}.call-controls,.incoming-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.call-control{padding:11px 18px;border-radius:12px;background:#202946;color:#fff;border:1px solid #3a4769;font-weight:800}.call-control.end{background:#d83f5d;border-color:#d83f5d}.profile-upload{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed #3a4769;border-radius:12px;background:#0d1322}
-.streak-badge{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:#ff8a45;font-weight:800}.streak-badge.active{color:#ff6b35}.live-location-card{position:fixed;right:18px;bottom:18px;z-index:18000;background:#11182b;border:1px solid #34415d;border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px #0008;max-width:300px}.poll-overlay{position:fixed;inset:0;z-index:17000;background:#05070dcc;display:none;align-items:center;justify-content:center;padding:18px}.poll-card{width:min(520px,100%);background:#11182b;border:1px solid #34415d;border-radius:20px;padding:20px;box-shadow:0 24px 70px #0009}.poll-option{display:block;width:100%;text-align:left;background:#19233a;color:#fff;border:1px solid #354264;border-radius:12px;padding:12px;margin:8px 0;cursor:pointer}.poll-option:hover{background:#233150}.poll-option.selected{border-color:#6c8cff;background:#24345a}.poll-count{float:right;color:#9aa6c2;font-size:12px}
+.streak-badge{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:#ff8a45;font-weight:800} .streak-formed-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:30000;pointer-events:none}.streak-formed-card{background:#111827;color:#fff;border:1px solid #ff8a45;border-radius:18px;padding:18px 26px;font-weight:800;font-size:22px;box-shadow:0 18px 60px #0008;animation:streakPop 2.4s ease forwards}.streak-formed-fire{font-size:38px;display:block;text-align:center;margin-bottom:4px}@keyframes streakPop{0%{opacity:0;transform:scale(.5) translateY(20px)}20%{opacity:1;transform:scale(1.08) translateY(0)}75%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.95) translateY(-20px)}}.streak-badge.active{color:#ff6b35}.live-location-card{position:fixed;right:18px;bottom:18px;z-index:18000;background:#11182b;border:1px solid #34415d;border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px #0008;max-width:300px}.poll-overlay{position:fixed;inset:0;z-index:17000;background:#05070dcc;display:none;align-items:center;justify-content:center;padding:18px}.poll-card{width:min(520px,100%);background:#11182b;border:1px solid #34415d;border-radius:20px;padding:20px;box-shadow:0 24px 70px #0009}.poll-option{display:block;width:100%;text-align:left;background:#19233a;color:#fff;border:1px solid #354264;border-radius:12px;padding:12px;margin:8px 0;cursor:pointer}.poll-option:hover{background:#233150}.poll-option.selected{border-color:#6c8cff;background:#24345a}.poll-count{float:right;color:#9aa6c2;font-size:12px}
 
 @media(max-width:700px){.call-btn{width:40px;min-width:40px;padding:0}.call-btn span{display:none}.chat-header .profile{min-width:0}.call-card{border-radius:18px;padding:12px}.call-video-stage{min-height:220px}.call-control{min-height:44px}}
 </style>
@@ -1827,7 +1827,7 @@ element.innerHTML = `
 <div class="friend-info">
 
 <b>
-@${friend.username}${friend.verified ? '<span class="verified-tick">✓</span>' : ''}${Number(friend.streak||0)>0 ? `<span class="streak-badge active">${Number(friend.streak)} day streak</span>` : ''}
+@${friend.username}${friend.verified ? '<span class="verified-tick">✓</span>' : ''}${Number(friend.streak||0)>0 ? `<span class="streak-badge active">🔥 ${Number(friend.streak)}</span>` : ''}
 </b>
 
 <div class="small">
@@ -2442,6 +2442,8 @@ function renderPoll(poll){
 async function votePoll(id,index){try{await api('/polls/'+id+'/vote',{method:'POST',body:JSON.stringify({optionIndex:index})});}catch(e){alert(e.message)}}
 async function loadActivePolls(){try{const polls=await api('/polls/active'); if(polls[0])renderPoll(polls[0]);}catch{}}
 
+function showStreakFormed(){ const old=$('streakFormedOverlay'); if(old)old.remove(); const el=document.createElement('div'); el.id='streakFormedOverlay'; el.className='streak-formed-overlay'; el.innerHTML='<div class="streak-formed-card"><span class="streak-formed-fire">🔥</span>Streak formed</div>'; document.body.appendChild(el); setTimeout(()=>el.remove(),2500); }
+
 function connectSocket(){
 
 try{
@@ -2490,7 +2492,7 @@ if(message.type === "poll_update"){
   document.querySelectorAll('#pollOptions .poll-option').forEach((b,i)=>{ const c=b.querySelector('[data-count]'); if(c)c.textContent=Number(message.votes?.[i]||0); b.classList.toggle('selected',message.myVote===i); });
 }
 if(message.type === "live_location") showLiveLocation(message);
-if(message.type === "streak_update"){ loadUser(); if(activeFriend&&message.from===activeFriend.uid) activeFriend.streak=message.streak; }
+if(message.type === "streak_update"){ loadUser(); if(activeFriend&&message.from===activeFriend.uid) activeFriend.streak=message.streak; if(message.formed) showStreakFormed(); }
 
 if(message.type === "friend_request"){
   showFriendRequestToast(message.from||'Someone',message.uid||'');
