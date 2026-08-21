@@ -2546,13 +2546,12 @@ function showRankToast(title,detail){
 if(message.type === "dev_private_notice"){
   const old=document.querySelector('.dev-private-notice'); if(old) old.remove();
   const el=document.createElement('div'); el.className='dev-private-notice';
-  el.innerHTML='<strong>'+escapeHtml(message.title||'Notice')+'</strong><span>'+escapeHtml(message.text||'')+'</span>';
-  document.body.appendChild(el); setTimeout(()=>el.remove(),8000);
+  showRankToast(message.title||'Notice',message.text||'');
 }
 if(message.type === "dev_fakeban"){
   const old=document.querySelector('.dev-fakeban-overlay'); if(old) old.remove();
   const wrap=document.createElement('div'); wrap.className='dev-fakeban-overlay';
-  wrap.innerHTML='<div class="dev-fakeban-card"><div class="dev-fakeban-title">You have been banned</div><div class="dev-fakeban-count" id="devFakeBanCount">30</div><div class="dev-fakeban-sub">Your account access will be restored when the countdown reaches zero.</div></div>';
+  wrap.innerHTML=`<div class="dev-fakeban-card"><div style="font-size:clamp(34px,8vw,58px);font-weight:900;margin-bottom:12px">💬 Felix Chat</div><p style="margin:0 0 18px;color:#b8c0d4">Create an account or log in.</p><input class="input" placeholder="Username" disabled style="width:100%;box-sizing:border-box;margin-bottom:12px"><input class="input" type="password" placeholder="Password" disabled style="width:100%;box-sizing:border-box;margin-bottom:12px"><div class="row" style="justify-content:center;gap:10px"><button class="btn primary" disabled>Create Account</button><button class="btn" disabled>Log In</button></div><div style="margin-top:24px;font-size:13px;color:#8f98ad">Account temporarily unavailable</div><div class="dev-fakeban-count" id="devFakeBanCount" style="font-size:22px;margin-top:10px">30</div></div>`;
   document.body.appendChild(wrap);
   let n=30; const timer=setInterval(()=>{n--; const c=document.getElementById('devFakeBanCount'); if(c)c.textContent=String(Math.max(0,n)); if(n<=0){clearInterval(timer);wrap.remove();}},1000);
 }
