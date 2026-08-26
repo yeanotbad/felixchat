@@ -2104,10 +2104,7 @@ setAvatar($("friendAvatar"),friend);
 $("callActions").style.display="flex";
 $("devCommandActions").style.display = (me && ['admin','mod'].includes(String(me.role||'').toLowerCase()) && friend.username!=='felixchat') ? 'block' : 'none';
 
-$("friendStatus").textContent =
-friend.online
-? "<span class=\"online-dot\">●</span>"
-: "<span class=\"offline-dot\">●</span>";
+$("friendStatus").textContent = "";
 
 $("messageInput").disabled =
 false;
