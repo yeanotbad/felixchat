@@ -70,7 +70,8 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS friend_streaks (pair_key TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, streak INTEGER DEFAULT 0, last_day TEXT DEFAULT '')`,
     `CREATE TABLE IF NOT EXISTS polls (id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, question TEXT NOT NULL, options_json TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS poll_votes (poll_id TEXT NOT NULL, uid TEXT NOT NULL, option_index INTEGER NOT NULL, voted_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`,
-    `CREATE TABLE IF NOT EXISTS poll_views (poll_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`
+    `CREATE TABLE IF NOT EXISTS poll_views (poll_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`,
+    `CREATE TABLE IF NOT EXISTS system_status (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -291,6 +292,29 @@ app.post('/api/dev/streak-restore',auth,async(req,res)=>{
   pair(req.uid,target.uid,{type:'streak_update',streak:Number(value.rows[0].streak||1),lastDay:value.rows[0].last_day});
   res.json({ok:true,streak:Number(value.rows[0].streak||1)});
 });
+async function getSystemStatus(){
+  try { const r=await db.execute({sql:'SELECT value FROM system_status WHERE key=?',args:['maintenance']}); return r.rows[0]?.value||''; } catch(e){ return ''; }
+}
+async function setSystemStatus(value){
+  await db.execute({sql:'INSERT INTO system_status(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',args:['maintenance',value||'']});
+}
+app.get('/api/admin/system-status',auth,async(req,res)=>{
+  const actor=await getUser(req.uid);
+  if(String(actor?.username||'').toLowerCase()!=='felixchat' || String(actor?.role||'').toLowerCase()!=='admin') return res.status(403).json({error:'Admin access required'});
+  res.json({status:await getSystemStatus()});
+});
+app.post('/api/admin/system-status',auth,async(req,res)=>{
+  const actor=await getUser(req.uid);
+  if(String(actor?.username||'').toLowerCase()!=='felixchat' || String(actor?.role||'').toLowerCase()!=='admin') return res.status(403).json({error:'Admin access required'});
+  const value=['down','updating',''].includes(String(req.body?.status||'')) ? String(req.body?.status||'') : '';
+  await setSystemStatus(value);
+  for(const uid of sockets.keys()){
+    if(String(uid)===String(req.uid)) continue;
+    broadcast(uid,{type:'system_status',status:value});
+  }
+  res.json({ok:true,status:value});
+});
+
 app.post('/api/dev/poll',auth,async(req,res)=>{
   const actor=await getUser(req.uid); if(String(actor?.username||'').toLowerCase()!=='felixchat') return res.status(403).json({error:'Developer access required'});
   const question=String(req.body.question||'').trim().slice(0,200);
@@ -510,6 +534,7 @@ app.get('/api/groups',auth,async(req,res)=>{const r=await db.execute({sql:`SELEC
 app.post('/api/groups/:gid/members',auth,async(req,res)=>{const other=req.body.uid;const member=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[req.params.gid,req.uid]});if(!member.rows.length)return res.status(403).json({error:'Not a group member'});await db.execute({sql:'INSERT OR IGNORE INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[req.params.gid,other,now()]});res.json({ok:true});});
 
 wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));
+        try { const status=await getSystemStatus(); const authedUser=await getUser(uid); if(status && String(authedUser?.username||'').toLowerCase()!=='felixchat') ws.send(JSON.stringify({type:'system_status',status})); } catch(e) {}
         try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(!(a.audience==='all'||ts.includes(uid)))continue;const seen=await db.execute({sql:'SELECT 1 FROM announcement_views WHERE announcement_id=? AND uid=?',args:[a.id,uid]});if(seen.rows.length)continue;const announcement={id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username};ws.send(JSON.stringify({type:'announcement',announcement}));await db.execute({sql:'INSERT OR IGNORE INTO announcement_views(announcement_id,uid,viewed_at) VALUES(?,?,?)',args:[a.id,uid,now()]});break;}}catch(e){}
         return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});
         if(uid&&m.type==='live_location'&&m.to&&await areFriends(uid,m.to)){
