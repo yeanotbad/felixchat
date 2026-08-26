@@ -1841,8 +1841,8 @@ element.innerHTML = `
 <div class="small">
 
 ${friend.online
-? "<span class=\"online-dot\">●</span>Online"
-: "<span class=\"offline-dot\">●</span>Offline"}
+? "<span class=\"online-dot\">●</span>"
+: "<span class=\"offline-dot\">●</span>"}
 
 </div>
 
@@ -2106,8 +2106,8 @@ $("devCommandActions").style.display = (me && ['admin','mod'].includes(String(me
 
 $("friendStatus").textContent =
 friend.online
-? "<span class=\"online-dot\">●</span>Online"
-: "<span class=\"offline-dot\">●</span>Offline";
+? "<span class=\"online-dot\">●</span>"
+: "<span class=\"offline-dot\">●</span>";
 
 $("messageInput").disabled =
 false;
@@ -3292,7 +3292,7 @@ window.addEventListener('keydown',e=>{if(e.key==='PrintScreen'&&(activeFriend||c
 
 <script>
 const _baseRenderFriends=window.renderFriends;
-window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'● Online · ':'○ Offline · ')+f.statusText;});};
+window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'●':'●';});};
 const _baseSelectFriend2=window.selectFriend;
 window.selectFriend=async function(friend){await _baseSelectFriend2(friend);const b=$('friendName');if(b)b.innerHTML=userLabel(friend);if($('featureTypingIndicator'))$('featureTypingIndicator').textContent='';const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button>';};
 function openPinnedPanel(){if(!activeFriend)return alert('Choose a friend first.');api('/messages/'+activeFriend.uid+'/pinned').then(rows=>openModal(`<h2>📌 Pinned Messages</h2>${rows.length?rows.map(m=>`<div class="feature-card" style="margin:8px 0"><b>${escapeHtml(m.text||m.kind||'Media')}</b><div class="small">${new Date(m.time).toLocaleString()}</div></div>`).join(''):'<p>No pinned messages.</p>'}<button class="btn" onclick="closeModal()">Done</button>`)).catch(e=>alert(e.message))}
