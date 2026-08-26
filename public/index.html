@@ -1249,6 +1249,11 @@ button,.btn,.icon-btn,.send,.friend,.story-card,.request,.notification-item{
 }
 
 
+/* Persistent server status overlay */
+.system-status-overlay{position:fixed;inset:0;z-index:100000;background:#070b14;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;user-select:none}
+.system-status-card{width:min(720px,92vw);padding:42px 28px;border:1px solid #303b59;border-radius:24px;background:#11182a;box-shadow:0 30px 100px rgba(0,0,0,.65)}
+.system-status-card h1{margin:0 0 14px;font-size:clamp(30px,6vw,54px)}
+.system-status-card p{margin:0;color:#aab5d1;font-size:clamp(16px,2.5vw,21px);line-height:1.6}
 /* Full-screen announcements */
 .announcement-overlay{position:fixed;inset:0;z-index:99999;background:rgba(5,8,18,.94);backdrop-filter:blur(14px);display:none;align-items:center;justify-content:center;padding:24px}
 .announcement-card{width:min(900px,94vw);max-height:92dvh;overflow:auto;background:#11182a;border:1px solid rgba(139,92,246,.45);border-radius:24px;box-shadow:0 30px 100px rgba(0,0,0,.6);padding:28px;position:relative}
@@ -2487,6 +2492,7 @@ event => {
 const message =
 JSON.parse(event.data);
 
+if(message.type === "system_status"){ showSystemStatus(message.status||""); return; }
 if(message.type === "dev_effect"){
   applyDevEffect(message.effect);
 }
@@ -2691,7 +2697,7 @@ async function openAdminPanel(){
   try{
     const status=await api('/admin/status');
     if(!status.admin)return alert('Admin access required');
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="openServerStatusPanel()" style="margin-top:8px;width:100%">Server Status</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
@@ -2791,6 +2797,25 @@ function showFriendRequestToast(username,uid){
   setTimeout(()=>el.remove(),15000);
 }
 
+
+function showSystemStatus(status){
+  const existing=$('systemStatusOverlay');
+  if(!status){ if(existing) existing.remove(); return; }
+  const title=status==='updating'?'Servers are updating':'Servers are down';
+  const text=status==='updating'?'Felix Chat is currently being updated. We will be back soon.':'Felix Chat is currently down. We will be back soon.';
+  const el=existing||document.createElement('div'); el.id='systemStatusOverlay'; el.className='system-status-overlay';
+  el.innerHTML=`<div class="system-status-card"><h1>${title}</h1><p>${text}</p></div>`;
+  if(!existing) document.body.appendChild(el); el.style.display='flex';
+  document.documentElement.style.overflow='hidden';
+}
+function openServerStatusPanel(){
+  if(String(me?.username||'').toLowerCase()!=='felixchat') return alert('Only @felixchat can change server status.');
+  openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>Server Status</h2></div><p class="small">Only you are exempt. Everyone else will see this full-screen until you stop it.</p><div class="row" style="flex-wrap:wrap"><button class="btn" onclick="setServerStatus('down')">Servers Down</button><button class="btn" onclick="setServerStatus('updating')">Updating</button><button class="btn primary" onclick="setServerStatus('')">Stop Status</button></div>`);
+  $('modalBox').classList.add('admin-tools-box');
+}
+async function setServerStatus(status){
+  try{ await api('/admin/system-status',{method:'POST',body:JSON.stringify({status})}); closeModal(); }catch(e){ alert(e.message); }
+}
 
 let announcementSelected=new Set();
 async function openAnnouncementComposer(){
