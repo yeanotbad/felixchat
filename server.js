@@ -65,6 +65,8 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, sender_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', audience TEXT DEFAULT 'all', targets_json TEXT DEFAULT '[]', created_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS announcement_views (announcement_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(announcement_id, uid))`,
     `CREATE TABLE IF NOT EXISTS group_messages (id TEXT PRIMARY KEY, gid TEXT NOT NULL, sender_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', created_at INTEGER NOT NULL, edited INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS group_notifications (id TEXT PRIMARY KEY, uid TEXT NOT NULL, gid TEXT NOT NULL, group_name TEXT NOT NULL, created_at INTEGER NOT NULL, read_at INTEGER)`,
+    `CREATE INDEX IF NOT EXISTS idx_group_notifications_uid ON group_notifications(uid, created_at)` ,
     `CREATE INDEX IF NOT EXISTS idx_group_messages_time ON group_messages(gid, created_at)`,
     `CREATE TABLE IF NOT EXISTS pinned_messages (message_id TEXT PRIMARY KEY, chat_key TEXT NOT NULL, pinned_by TEXT NOT NULL, pinned_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS friend_streaks (pair_key TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, streak INTEGER DEFAULT 0, last_day TEXT DEFAULT '')`,
@@ -560,10 +562,67 @@ app.get('/api/notifications/unread',auth,async(req,res)=>{
   res.json(r.rows.map(m=>({id:m.id,uid:m.sender_id,username:m.username,displayName:m.display_name||m.username,text:m.text||'',kind:m.kind,time:m.created_at})));
 });
 
-// Simple group-chat backend.
-app.post('/api/groups',auth,async(req,res)=>{const name=String(req.body.name||'New Group').trim().slice(0,40);const gid=id();await db.batch([{sql:'INSERT INTO groups(gid,name,owner_id,created_at) VALUES(?,?,?,?)',args:[gid,name,req.uid,now()]},{sql:'INSERT INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[gid,req.uid,now()]}]);res.json({gid,name});});
-app.get('/api/groups',auth,async(req,res)=>{const r=await db.execute({sql:`SELECT g.* FROM groups g JOIN group_members m ON m.gid=g.gid WHERE m.uid=? ORDER BY g.created_at DESC`,args:[req.uid]});const out=[];for(const g of r.rows){const m=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN group_members gm ON gm.uid=u.uid WHERE gm.gid=?`,args:[g.gid]});out.push({...g,members:m.rows.map(u=>publicUser(u,(sockets.get(u.uid)?.size||0)>0))});}res.json(out);});
-app.post('/api/groups/:gid/members',auth,async(req,res)=>{const other=req.body.uid;const member=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[req.params.gid,req.uid]});if(!member.rows.length)return res.status(403).json({error:'Not a group member'});await db.execute({sql:'INSERT OR IGNORE INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[req.params.gid,other,now()]});res.json({ok:true});});
+// Group chat backend: membership is the source of truth. A user can only see groups
+// they belong to, and adding a member creates a realtime + persistent notification.
+async function notifyGroupAdded(uid,gid,name){
+  const n={id:id(),uid,gid,groupName:name,createdAt:now()};
+  await db.execute({sql:'INSERT INTO group_notifications(id,uid,gid,group_name,created_at) VALUES(?,?,?,?,?)',args:[n.id,uid,gid,name,n.createdAt]});
+  broadcast(uid,{type:'group_added',notification:n});
+}
+app.post('/api/groups',auth,async(req,res)=>{
+  try{
+    const name=String(req.body.name||'New Group').trim().slice(0,40)||'New Group';
+    let memberIds=Array.isArray(req.body.memberIds)?req.body.memberIds.map(x=>String(x)).filter(Boolean):[];
+    memberIds=[...new Set(memberIds)].filter(x=>x!==req.uid);
+    // Only accepted friends may be added to a group.
+    for(const uid of memberIds){ if(!await areFriends(req.uid,uid)) return res.status(403).json({error:'You can only add your friends to a group.'}); }
+    const gid=id(), created=now();
+    const ops=[
+      {sql:'INSERT INTO groups(gid,name,owner_id,created_at) VALUES(?,?,?,?)',args:[gid,name,req.uid,created]},
+      {sql:'INSERT INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[gid,req.uid,created]}
+    ];
+    for(const uid of memberIds)ops.push({sql:'INSERT INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[gid,uid,created]});
+    await db.batch(ops,'write');
+    for(const uid of memberIds) await notifyGroupAdded(uid,gid,name);
+    res.json({gid,name,owner_id:req.uid,members:[req.uid,...memberIds]});
+  }catch(e){console.error(e);res.status(500).json({error:'Could not create group.'});}
+});
+app.get('/api/groups',auth,async(req,res)=>{
+  const r=await db.execute({sql:`SELECT g.* FROM groups g JOIN group_members m ON m.gid=g.gid WHERE m.uid=? ORDER BY g.created_at DESC`,args:[req.uid]});
+  const out=[];
+  for(const g of r.rows){
+    const m=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN group_members gm ON gm.uid=u.uid WHERE gm.gid=?`,args:[g.gid]});
+    out.push({...g,members:m.rows.map(u=>publicUser(u,(sockets.get(u.uid)?.size||0)>0))});
+  }
+  res.json(out);
+});
+app.get('/api/groups/notifications',auth,async(req,res)=>{
+  const r=await db.execute({sql:`SELECT id,gid,group_name,created_at FROM group_notifications WHERE uid=? AND read_at IS NULL ORDER BY created_at DESC LIMIT 20`,args:[req.uid]});
+  res.json(r.rows.map(x=>({id:x.id,gid:x.gid,groupName:x.group_name,createdAt:x.created_at})));
+});
+app.post('/api/groups/notifications/:id/read',auth,async(req,res)=>{await db.execute({sql:'UPDATE group_notifications SET read_at=? WHERE id=? AND uid=?',args:[now(),req.params.id,req.uid]});res.json({ok:true});});
+app.post('/api/groups/:gid/members',auth,async(req,res)=>{
+  const gid=req.params.gid,other=String(req.body.uid||'');
+  const member=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[gid,req.uid]});
+  if(!member.rows.length)return res.status(403).json({error:'Not a group member'});
+  const g=await db.execute({sql:'SELECT name FROM groups WHERE gid=?',args:[gid]});
+  if(!g.rows[0])return res.status(404).json({error:'Group not found'});
+  if(!other||other===req.uid)return res.status(400).json({error:'Invalid member'});
+  if(!await areFriends(req.uid,other))return res.status(403).json({error:'You can only add your friends to a group.'});
+  const exists=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[gid,other]});
+  if(exists.rows.length)return res.json({ok:true,alreadyMember:true});
+  await db.execute({sql:'INSERT INTO group_members(gid,uid,joined_at) VALUES(?,?,?)',args:[gid,other,now()]});
+  await notifyGroupAdded(other,gid,g.rows[0].name);
+  res.json({ok:true});
+});
+app.post('/api/groups/:gid/members/remove',auth,async(req,res)=>{const gid=req.params.gid,other=req.body.uid;const g=await db.execute({sql:'SELECT owner_id FROM groups WHERE gid=?',args:[gid]});if(!g.rows[0]||g.rows[0].owner_id!==req.uid)return res.status(403).json({error:'Only the group owner can remove members'});await db.execute({sql:'DELETE FROM group_members WHERE gid=? AND uid=?',args:[gid,other]});res.json({ok:true});});
+app.delete('/api/groups/:gid/leave',auth,async(req,res)=>{
+  const gid=req.params.gid;
+  if(!await groupMember(gid,req.uid))return res.status(403).json({error:'Not a group member'});
+  // Leaving only removes this membership. The group and its messages remain.
+  await db.execute({sql:'DELETE FROM group_members WHERE gid=? AND uid=?',args:[gid,req.uid]});
+  res.json({ok:true});
+});
 
 wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));
         try { const status=await getSystemStatus(); const authedUser=await getUser(uid); if(status && String(authedUser?.username||'').toLowerCase()!=='felixchat') ws.send(JSON.stringify({type:'system_status',status})); } catch(e) {}
@@ -571,7 +630,7 @@ wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JS
         return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});
         if(uid&&m.groupCall&&m.gid&&['group_call_invite','group_call_join','group_call_signal','group_call_leave','group_call_end'].includes(m.type)&&await groupMember(m.gid,uid)){
           const members=await db.execute({sql:'SELECT uid FROM group_members WHERE gid=?',args:[m.gid]});
-          const payload={type:m.type,from:uid,fromUsername:(await getUser(uid))?.username||'',gid:m.gid,groupCall:true,target:m.target||null,callType:m.callType||'audio',payload:m.payload||null};
+          const grow=await db.execute({sql:'SELECT name FROM groups WHERE gid=?',args:[m.gid]}); const payload={type:m.type,from:uid,fromUsername:(await getUser(uid))?.username||'',gid:m.gid,groupName:grow.rows[0]?.name||'Group',groupCall:true,target:m.target||null,callType:m.callType||'audio',payload:m.payload||null};
           for(const row of members.rows){if(row.uid===uid)continue;if(m.type!=='group_call_join' && m.target && row.uid!==m.target)continue;broadcast(row.uid,payload);}
         }
         if(uid&&m.type==='live_location'&&m.to&&await areFriends(uid,m.to)){
