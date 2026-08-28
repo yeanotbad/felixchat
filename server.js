@@ -51,7 +51,7 @@ async function touchFriendStreak(a,b){
 
 async function init() {
   await db.batch([
-    `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, display_name TEXT, bio TEXT DEFAULT '', avatar TEXT DEFAULT '', role TEXT DEFAULT 'member', verified INTEGER DEFAULT 0, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL, streak INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, display_name TEXT, bio TEXT DEFAULT '', avatar TEXT DEFAULT '', role TEXT DEFAULT 'member', verified INTEGER DEFAULT 0, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL, streak INTEGER DEFAULT 0, felix_score INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, uid TEXT NOT NULL, created_at INTEGER NOT NULL, FOREIGN KEY(uid) REFERENCES users(uid))`,
     `CREATE TABLE IF NOT EXISTS friendships (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(user_id, friend_id))`,
     `CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, chat_key TEXT NOT NULL, sender_id TEXT NOT NULL, receiver_id TEXT NOT NULL, text TEXT DEFAULT '', kind TEXT DEFAULT 'text', url TEXT DEFAULT '', name TEXT DEFAULT '', mime TEXT DEFAULT '', created_at INTEGER NOT NULL, read_at INTEGER, expires_at INTEGER, reply_to TEXT, edited INTEGER DEFAULT 0)`,
