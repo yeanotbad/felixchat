@@ -569,6 +569,11 @@ wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JS
         try { const status=await getSystemStatus(); const authedUser=await getUser(uid); if(status && String(authedUser?.username||'').toLowerCase()!=='felixchat') ws.send(JSON.stringify({type:'system_status',status})); } catch(e) {}
         try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(!(a.audience==='all'||ts.includes(uid)))continue;const seen=await db.execute({sql:'SELECT 1 FROM announcement_views WHERE announcement_id=? AND uid=?',args:[a.id,uid]});if(seen.rows.length)continue;const announcement={id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username};ws.send(JSON.stringify({type:'announcement',announcement}));await db.execute({sql:'INSERT OR IGNORE INTO announcement_views(announcement_id,uid,viewed_at) VALUES(?,?,?)',args:[a.id,uid,now()]});break;}}catch(e){}
         return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});
+        if(uid&&m.groupCall&&m.gid&&['group_call_invite','group_call_join','group_call_signal','group_call_leave','group_call_end'].includes(m.type)&&await groupMember(m.gid,uid)){
+          const members=await db.execute({sql:'SELECT uid FROM group_members WHERE gid=?',args:[m.gid]});
+          const payload={type:m.type,from:uid,fromUsername:(await getUser(uid))?.username||'',gid:m.gid,groupCall:true,target:m.target||null,callType:m.callType||'audio',payload:m.payload||null};
+          for(const row of members.rows){if(row.uid===uid)continue;if(m.type!=='group_call_join' && m.target && row.uid!==m.target)continue;broadcast(row.uid,payload);}
+        }
         if(uid&&m.type==='live_location'&&m.to&&await areFriends(uid,m.to)){
           const p=m.payload||{}; const lat=Number(p.lat),lon=Number(p.lon);
           if(Number.isFinite(lat)&&Number.isFinite(lon)) broadcast(m.to,{type:'live_location',from:uid,payload:{lat,lon,accuracy:Number(p.accuracy)||0,active:p.active!==false,at:Date.now()}});
