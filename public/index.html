@@ -1554,7 +1554,7 @@ button:focus-visible,input:focus-visible{
 <div
 class="avatar profile-avatar-button"
 id="myAvatar"
-role="button" tabindex="0" onclick="editProfile()" onkeydown="if(event.key==='Enter'||event.key===' ')editProfile()" aria-label="Open your profile"
+role="button" tabindex="0" onclick="openUserProfile(me?.uid)" onkeydown="if((event.key==='Enter'||event.key===' ')&&me?.uid)openUserProfile(me.uid)" aria-label="Open your profile"
 >
 F
 </div>
@@ -3567,7 +3567,7 @@ async function openUserProfile(uid){
 // Keep the normal modal system, but clear the full-screen profile mode whenever it closes.
 document.addEventListener('click',()=>{const m=document.getElementById('modal');if(m&&m.style.display==='none')m.classList.remove('profile-fullscreen-modal')});
 const _baseRenderFriends=window.renderFriends;
-window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'●':'●';});};
+window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'● Online':'● Offline');});};
 const _baseSelectFriend2=window.selectFriend;
 window.selectFriend=async function(friend){await _baseSelectFriend2(friend);const b=$('friendName');if(b)b.innerHTML=userLabel(friend);if($('featureTypingIndicator'))$('featureTypingIndicator').textContent='';const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button>';};
 function openPinnedPanel(){if(!activeFriend)return alert('Choose a friend first.');api('/messages/'+activeFriend.uid+'/pinned').then(rows=>openModal(`<h2>📌 Pinned Messages</h2>${rows.length?rows.map(m=>`<div class="feature-card" style="margin:8px 0"><b>${escapeHtml(m.text||m.kind||'Media')}</b><div class="small">${new Date(m.time).toLocaleString()}</div></div>`).join(''):'<p>No pinned messages.</p>'}<button class="btn" onclick="closeModal()">Done</button>`)).catch(e=>alert(e.message))}
@@ -3604,6 +3604,224 @@ window.createFeatureGroup=createGroupWizard;
    });
  }
  setInterval(enhance,700);
+})();
+</script>
+
+
+<script id="felix-final-requested-features">
+/* Final additive polish: profile navigation, multi-story viewing, seen rings,
+   outside-click closing, and iPhone portrait-safe navigation. */
+(function(){
+  // Clicking the modal backdrop closes it; the existing X/buttons still work.
+  const modal=document.getElementById('modal');
+  if(modal){
+    modal.addEventListener('click',function(e){
+      if(e.target===modal) closeModal();
+    });
+  }
+
+  // The mobile back button is intentionally additive because older builds did
+  // not always expose the helper function.
+  window.mobileShowChats=function(){
+    document.body.classList.remove('mobile-chat-open');
+    const chat=document.querySelector('.chat');
+    if(chat) chat.scrollTop=0;
+  };
+
+  // Profile pictures, not names, open profiles from the friend list.
+  const originalRenderFriends=window.renderFriends;
+  if(typeof originalRenderFriends==='function'){
+    window.renderFriends=function(){
+      originalRenderFriends();
+      document.querySelectorAll('#friends .friend').forEach(function(el){
+        const friend=(me?.friends||[]).find(f=>el.classList.contains('active')&&f.uid===activeFriend?.uid) ||
+          (me?.friends||[]).find(f=>el.querySelector('.friend-info b')?.textContent?.includes('@'+f.username));
+        const avatar=el.querySelector('.avatar');
+        const name=el.querySelector('.friend-info b');
+        if(avatar && friend){
+          avatar.classList.add('profile-avatar-button');
+          avatar.setAttribute('role','button');
+          avatar.setAttribute('tabindex','0');
+          avatar.setAttribute('aria-label','Open '+friend.username+' profile');
+          avatar.onclick=function(e){e.stopPropagation();openUserProfile(friend.uid);};
+          avatar.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();openUserProfile(friend.uid);}};
+        }
+        if(name){
+          name.classList.remove('profile-link');
+          name.removeAttribute('onclick');
+          name.style.cursor='default';
+        }
+      });
+    };
+    // Re-render once now and whenever the app refreshes the friend list.
+    try{window.renderFriends();}catch(_){}
+  }
+
+  // ----- Multi-story viewer -----
+  window.storyViewerQueue=[];
+  window.storyViewerIndex=0;
+
+  function userStories(uid){
+    return (window.storiesCache||[]).filter(s=>s.uid===uid)
+      .sort((a,b)=>Number(a.time)-Number(b.time));
+  }
+
+  async function openStoryAt(stories,index){
+    if(!stories.length){closeStory();return;}
+    window.storyViewerQueue=stories;
+    window.storyViewerIndex=Math.max(0,Math.min(index,stories.length-1));
+    const st=stories[window.storyViewerIndex];
+    await window.renderStoryFrame(st);
+  }
+
+  window.renderStoryFrame=async function(st){
+    const viewer=document.getElementById('storyViewer');
+    const media=document.getElementById('storyViewerMedia');
+    const cap=document.getElementById('storyViewerCaption');
+    if(!viewer||!media||!st)return;
+    media.innerHTML='';
+    cap.textContent=st.caption||'';
+
+    const box=viewer.querySelector('.story-viewer-box');
+    box?.querySelector('.story-viewer-meta')?.remove();
+    const header=document.createElement('div');
+    header.className='story-viewer-meta';
+    header.textContent=(st.displayName||st.username||'Story')+'  •  '+new Date(Number(st.time)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    box?.prepend(header);
+
+    if(st.kind==='video'){
+      const v=document.createElement('video');
+      v.src=st.url; v.controls=true; v.autoplay=true; v.playsInline=true;
+      v.onclick=function(e){ if(e.target===v && !e.target.controls) window.nextStory(); };
+      media.appendChild(v);
+    }else{
+      const img=document.createElement('img');
+      img.src=st.url; img.alt='Story';
+      img.onclick=function(e){e.stopPropagation();window.nextStory();};
+      media.appendChild(img);
+    }
+    viewer.style.display='flex';
+    try{
+      await api('/stories/'+encodeURIComponent(st.id)+'/view',{method:'POST',body:'{}'});
+      st.seen=true;
+      renderStories();
+    }catch(_){}
+  };
+
+  window.nextStory=function(){
+    const q=window.storyViewerQueue||[];
+    const i=Number(window.storyViewerIndex||0);
+    if(i+1<q.length){
+      openStoryAt(q,i+1);
+    }else{
+      closeStory();
+    }
+  };
+
+  // Replace story opening with grouped, chronological stories for that user.
+  window.viewStory=function(st){
+    if(!st)return;
+    const q=userStories(st.uid);
+    const idx=Math.max(0,q.findIndex(x=>x.id===st.id));
+    openStoryAt(q,idx<0?0:idx);
+  };
+
+  window.showMyStories=async function(){
+    try{
+      const mine=await loadMyStories();
+      mine.forEach(s=>s.seen=true);
+      if(!mine.length){
+        openModal('<h2>👻 Your Stories</h2><p>You have no active stories.</p><button class="btn" onclick="closeModal()">Done</button>');
+        return;
+      }
+      closeModal();
+      openStoryAt(mine.sort((a,b)=>Number(a.time)-Number(b.time)),0);
+    }catch(e){alert('Could not load your stories: '+e.message)}
+  };
+
+  // The strip groups a friend's active stories into one PFP. Blue = at least
+  // one unseen story, grey = every active story has been viewed.
+  window.renderStories=function(){
+    const strip=document.getElementById('storyStrip'); if(!strip)return;
+    strip.innerHTML='';
+    const add=document.createElement('div');
+    add.className='story-card';
+    add.innerHTML='<div class="story-ring story-add">＋</div><div class="small">Your story</div>';
+    add.onclick=createStory;
+    strip.appendChild(add);
+
+    const mine=storiesCache.filter(s=>s.uid===me?.uid);
+    if(mine.length){
+      const c=document.createElement('div');
+      c.className='story-card';
+      c.innerHTML='<div class="story-ring story-add">👁</div><div class="small">Your stories ('+mine.length+')</div>';
+      c.onclick=showMyStories;
+      strip.appendChild(c);
+    }
+
+    const byUser=new Map();
+    storiesCache.forEach(st=>{if(st.uid!==me?.uid){if(!byUser.has(st.uid))byUser.set(st.uid,[]);byUser.get(st.uid).push(st);}});
+    byUser.forEach(function(stories,uid){
+      stories.sort((a,b)=>Number(a.time)-Number(b.time));
+      const unseen=stories.some(s=>!s.seen);
+      const st=stories[0];
+      const d=document.createElement('div');
+      d.className='story-card';
+      d.innerHTML='<div class="story-ring '+(unseen?'story-unseen':'story-seen')+'"><img src="'+escapeHtml(st.avatar||'')+'" onerror="this.style.display=\'none\'"></div><div class="small">'+escapeHtml(st.displayName||st.username)+(stories.length>1?' · '+stories.length:'')+'</div>';
+      d.onclick=function(){viewStory(st);};
+      strip.appendChild(d);
+    });
+  };
+
+  // Story upload stays additive: every POST creates a new story; no previous
+  // active story is replaced.
+  window.uploadStory=async function(e){
+    const file=e.target.files?.[0]; e.target.value='';
+    if(!file)return;
+    if(file.size>50*1024*1024)return alert('Story is over 50 MB.');
+    const caption=prompt('Story caption (optional):','')||'';
+    try{
+      const uploaded=await uploadToCloudinary(file);
+      await api('/stories',{method:'POST',body:JSON.stringify({url:uploaded.url,mime:uploaded.mime,caption})});
+      storiesCache=await api('/stories');
+      renderStories();
+    }catch(err){alert(err.message)}
+  };
+
+  // Story backdrop still closes, and the close button remains usable.
+  const storyViewer=document.getElementById('storyViewer');
+  if(storyViewer){
+    storyViewer.addEventListener('click',function(e){
+      if(e.target===storyViewer) closeStory();
+    });
+  }
+
+  // iPhone-safe portrait layout. This doesn't remove any desktop features.
+  const viewport=document.querySelector('meta[name="viewport"]');
+  if(viewport) viewport.setAttribute('content','width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content');
+
+  // Make the profile screen use the actual modal box on every screen size.
+  const style=document.createElement('style');
+  style.textContent=`
+    .profile-fullscreen-modal{padding:0!important;align-items:stretch!important;}
+    .profile-fullscreen-modal #modalBox{width:100vw!important;max-width:none!important;height:100dvh!important;max-height:none!important;padding:0!important;border-radius:0!important;overflow:auto!important;}
+    .story-viewer-meta{position:absolute;z-index:4;left:18px;right:60px;top:16px;padding:10px 12px;border-radius:12px;background:#0008;color:#fff;font-weight:800;font-size:13px;pointer-events:none;}
+    .story-ring.story-unseen{background:#208cff!important;box-shadow:0 0 0 2px #208cff,0 0 16px #208cff55!important;}
+    .story-ring.story-seen{background:#68748a!important;box-shadow:none!important;}
+    .story-ring.story-seen img,.story-ring.story-unseen img{border-color:#10182a!important;}
+    .story-viewer-box #storyViewerMedia img{cursor:pointer;}
+    @media(max-width:700px){
+      html,body{width:100%!important;max-width:100vw!important;overflow-x:hidden!important;}
+      .app{width:100vw!important;max-width:100vw!important;height:100dvh!important;min-height:100svh!important;display:block!important;overflow:hidden!important;}
+      .sidebar{width:100vw!important;height:100dvh!important;max-width:100vw!important;overflow-x:hidden!important;}
+      .chat{width:100vw!important;height:100dvh!important;max-width:100vw!important;min-width:0!important;overflow:hidden!important;}
+      .chat-header,.story-strip,.messages,.composer{max-width:100vw!important;}
+      .story-viewer{padding:0!important;}
+      .story-viewer-box{width:100vw!important;height:100dvh!important;max-width:100vw!important;border-radius:0!important;}
+      .profile-screen{width:100%!important;min-height:100dvh!important;}
+    }
+  `;
+  document.head.appendChild(style);
 })();
 </script>
 
