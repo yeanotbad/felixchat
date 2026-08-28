@@ -1336,6 +1336,11 @@ button:focus-visible,input:focus-visible{
 .streak-badge{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:#ff8a45;font-weight:800} .streak-formed-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:30000;pointer-events:none}.streak-formed-card{background:#111827;color:#fff;border:1px solid #ff8a45;border-radius:18px;padding:18px 26px;font-weight:800;font-size:22px;box-shadow:0 18px 60px #0008;animation:streakPop 2.4s ease forwards}.streak-formed-fire{font-size:38px;display:block;text-align:center;margin-bottom:4px}@keyframes streakPop{0%{opacity:0;transform:scale(.5) translateY(20px)}20%{opacity:1;transform:scale(1.08) translateY(0)}75%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.95) translateY(-20px)}}.streak-badge.active{color:#ff6b35}.live-location-card{position:fixed;right:18px;bottom:18px;z-index:18000;background:#11182b;border:1px solid #34415d;border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px #0008;max-width:300px}.poll-overlay{position:fixed;inset:0;z-index:17000;background:#05070dcc;display:none;align-items:center;justify-content:center;padding:18px}.poll-card{width:min(520px,100%);background:#11182b;border:1px solid #34415d;border-radius:20px;padding:20px;box-shadow:0 24px 70px #0009}.poll-option{display:block;width:100%;text-align:left;background:#19233a;color:#fff;border:1px solid #354264;border-radius:12px;padding:12px;margin:8px 0;cursor:pointer}.poll-option:hover{background:#233150}.poll-option.selected{border-color:#6c8cff;background:#24345a}.poll-count{float:right;color:#9aa6c2;font-size:12px}
 
 @media(max-width:700px){.call-btn{width:40px;min-width:40px;padding:0}.call-btn span{display:none}.chat-header .profile{min-width:0}.call-card{border-radius:18px;padding:12px}.call-video-stage{min-height:220px}.call-control{min-height:44px}}
+
+/* Full-screen profile experience + iPhone-safe layout override */
+.profile-avatar-button{cursor:pointer;transition:transform .16s ease,box-shadow .16s ease}.profile-avatar-button:hover,.profile-avatar-button:focus-visible{transform:scale(1.06);box-shadow:0 0 0 3px rgba(116,101,255,.35);outline:none}.profile-link{cursor:inherit}
+.modal.profile-fullscreen-modal{padding:0!important;align-items:stretch!important;background:#070b15!important}.modal.profile-fullscreen-modal .modal-content{width:100vw!important;max-width:none!important;height:100dvh!important;max-height:none!important;border-radius:0!important;padding:0!important;background:#090e1b!important;overflow:auto!important}.profile-screen{min-height:100dvh;width:100%;background:radial-gradient(circle at top,#17294a 0,#0a1020 40%,#070b15 100%);padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));position:relative}.profile-screen-banner{height:clamp(190px,30vh,330px);width:100%;border-radius:0 0 30px 30px;background:linear-gradient(135deg,#694cff,#18c9ff);object-fit:cover;display:block}.profile-screen-close{position:absolute;top:max(18px,env(safe-area-inset-top));right:max(18px,env(safe-area-inset-right));z-index:2;width:48px;height:48px;border-radius:50%;background:#0c1220cc;color:#fff;border:1px solid #ffffff2b;font-size:24px}.profile-screen-main{max-width:980px;margin:0 auto;padding:0 20px 40px}.profile-screen-avatar{width:clamp(112px,18vw,160px);height:clamp(112px,18vw,160px);margin-top:calc(clamp(112px,18vw,160px)/-2.2);border-radius:50%;border:6px solid #0a1020;background:#121b30;overflow:hidden;position:relative;z-index:1}.profile-screen-avatar img{width:100%;height:100%;object-fit:cover}.profile-screen-head{display:flex;align-items:end;justify-content:space-between;gap:18px;flex-wrap:wrap}.profile-screen-name{font-size:clamp(30px,5vw,54px);font-weight:900;margin:18px 0 2px}.profile-screen-handle{color:#9dabc7;font-size:16px}.profile-online{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:9px 13px;border:1px solid #ffffff18;border-radius:999px;background:#111a2d99}.profile-screen-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(250px,.7fr);gap:16px;margin-top:28px}.profile-screen-panel{background:#111a2bd9;border:1px solid #2a3856;border-radius:24px;padding:22px;box-shadow:0 18px 60px #0005}.profile-screen-panel h3{margin:0 0 12px;font-size:15px;color:#aeb9d0}.profile-screen-bio{font-size:17px;line-height:1.6;white-space:pre-wrap}.profile-screen-stat{font-size:18px;font-weight:800;padding:10px 0;border-bottom:1px solid #ffffff10}.profile-screen-stat:last-child{border-bottom:0}
+@media(max-width:700px){html,body{width:100%;min-height:100%;overflow-x:hidden}.app{width:100%;height:100dvh;min-height:100svh;min-height:100dvh;overflow:hidden}.sidebar,.chat{min-width:0}.sidebar{width:100%;height:100dvh;padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(10px,env(safe-area-inset-bottom));overflow-y:auto;overflow-x:hidden}.chat{height:100dvh;min-height:0}.chat-header{padding-top:env(safe-area-inset-top);height:calc(56px + env(safe-area-inset-top));min-height:calc(56px + env(safe-area-inset-top));flex:0 0 auto}.messages{min-height:0;overscroll-behavior:contain}.composer{padding-bottom:max(8px,env(safe-area-inset-bottom))}.profile-screen{padding-left:max(0px,env(safe-area-inset-left));padding-right:max(0px,env(safe-area-inset-right));padding-bottom:max(24px,env(safe-area-inset-bottom))}.profile-screen-banner{height:28vh;min-height:190px;border-radius:0 0 24px 24px}.profile-screen-main{padding:0 16px 28px}.profile-screen-avatar{margin-top:-58px}.profile-screen-grid{grid-template-columns:1fr;margin-top:20px}.profile-screen-panel{border-radius:20px;padding:18px}.profile-screen-name{font-size:32px}.profile-screen-close{top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right))}}
 </style>
 </head>
 
@@ -1352,8 +1357,9 @@ button:focus-visible,input:focus-visible{
 <div class="profile">
 
 <div
-class="avatar"
+class="avatar profile-avatar-button"
 id="myAvatar"
+role="button" tabindex="0" onclick="editProfile()" onkeydown="if(event.key==='Enter'||event.key===' ')editProfile()" aria-label="Open your profile"
 >
 F
 </div>
@@ -1437,8 +1443,9 @@ Log Out
 <div class="profile">
 
 <div
-class="avatar"
+class="avatar profile-avatar-button"
 id="friendAvatar"
+role="button" tabindex="0" onclick="if(activeFriend)openUserProfile(activeFriend.uid)" onkeydown="if((event.key==='Enter'||event.key===' ')&&activeFriend)openUserProfile(activeFriend.uid)" aria-label="Open profile"
 >
 ?
 </div>
@@ -1858,7 +1865,7 @@ element.innerHTML = `
 
 <div class="friend-info">
 
-<b class="profile-link" onclick="event.stopPropagation();openUserProfile('${friend.uid}')">
+<b class="profile-link">
 @${friend.username}${friend.verified ? '<span class="verified-tick">✓</span>' : ''}${Number(friend.streak||0)>0 ? `<span class="streak-badge active">🔥 ${Number(friend.streak)}</span>` : ''}
 </b>
 
@@ -3342,14 +3349,22 @@ async function markMessageRead(messageId){
 function updateReadState(messageId){const el=document.querySelector(`[data-read-state="${CSS.escape(messageId)}"]`);if(el)el.textContent='Seen';}
 function formatLastSeen(ts){if(!ts)return 'Last online: unknown';const d=Date.now()-Number(ts);if(d<60000)return 'Last online: just now';if(d<3600000)return 'Last online: '+Math.floor(d/60000)+' min ago';if(d<86400000)return 'Last online: '+Math.floor(d/3600000)+' hr ago';return 'Last online: '+new Date(Number(ts)).toLocaleString();}
 async function openUserProfile(uid){
-  try{const u=await api('/users/'+encodeURIComponent(uid));const online=!!u.online;openModal(`<div class="profile-card"><button class="btn" style="float:right" onclick="closeModal()">Close</button>${u.banner?`<img class="profile-modal-banner" src="${escapeHtml(u.banner)}">`:''}<div class="profile-modal-avatar">${avatarMarkup(u)}</div><h2 style="margin:8px 0 2px">${userLabel(u)}</h2><div class="profile-stat"><span class="activity-dot ${online?'online':''}"></span>${online?'Online now':formatLastSeen(u.lastSeen)}</div>${u.statusText?`<p>${escapeHtml(u.statusText)}</p>`:''}<p>${escapeHtml(u.bio||'No bio yet.')}</p>${Number(u.streak||0)>0?`<div class="profile-stat">🔥 ${Number(u.streak)} day friend streak</div>`:''}</div>`);}catch(e){alert(e.message)}
+  try{
+    const u=await api('/users/'+encodeURIComponent(uid));
+    const online=!!u.online;
+    const modalHtml=`<div class="profile-screen"><button class="profile-screen-close" onclick="closeModal()" aria-label="Close profile">×</button>${u.banner?`<img class="profile-screen-banner" src="${escapeHtml(u.banner)}" alt="">`:`<div class="profile-screen-banner"></div>`}<div class="profile-screen-main"><div class="profile-screen-avatar">${avatarMarkup(u)}</div><div class="profile-screen-head"><div><div class="profile-screen-name">${userLabel(u)}</div><div class="profile-screen-handle">@${escapeHtml(u.username)}</div><div class="profile-online"><span class="activity-dot ${online?'online':''}"></span>${online?'Online now':formatLastSeen(u.lastSeen)}</div></div>${u.statusText?`<div class="profile-online">${escapeHtml(u.statusText)}</div>`:''}</div><div class="profile-screen-grid"><section class="profile-screen-panel"><h3>ABOUT</h3><div class="profile-screen-bio">${escapeHtml(u.bio||'No bio yet.')}</div></section><section class="profile-screen-panel"><h3>PROFILE</h3>${Number(u.streak||0)>0?`<div class="profile-screen-stat">🔥 ${Number(u.streak)} day friend streak</div>`:''}<div class="profile-screen-stat">${u.verified?'✓ Verified':'Felix Chat member'}</div><div class="profile-screen-stat">${online?'● Online':'○ Offline'}</div></section></div></div></div>`;
+    openModal(modalHtml);
+    const overlay=document.getElementById('modal');
+    if(overlay)overlay.classList.add('profile-fullscreen-modal');
+  }catch(e){alert(e.message)}
 }
 
 /* Add a features button once the DOM is ready. */
 (function addFeatureButton(){const bar=document.querySelector('.snap-toolbar');if(bar&&!$('featureHubBtn')){const b=document.createElement('button');b.id='featureHubBtn';b.className='btn';b.textContent='✨ More Features';b.onclick=showFeatureHub;bar.appendChild(b)}})();
 </script>
-
 <script>
+// Keep the normal modal system, but clear the full-screen profile mode whenever it closes.
+document.addEventListener('click',()=>{const m=document.getElementById('modal');if(m&&m.style.display==='none')m.classList.remove('profile-fullscreen-modal')});
 const _baseRenderFriends=window.renderFriends;
 window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'●':'●';});};
 const _baseSelectFriend2=window.selectFriend;
