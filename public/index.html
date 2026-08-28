@@ -1687,7 +1687,7 @@ token
 
 closeModal();
 
-loadUser();
+loadUser().then(()=>showDeviceChoiceIfNeeded());
 
 }
 
@@ -1765,6 +1765,21 @@ async function uploadToCloudinary(file){
 /* AVATARS */
 function avatarMarkup(user){return user?.avatar?`<img src="${escapeHtml(user.avatar)}" alt="" onerror="this.style.display='none'">`:initials(user?.username||'')}
 function setAvatar(el,user){if(el)el.innerHTML=avatarMarkup(user)}
+
+/* DEVICE LAYOUT PREFERENCE */
+function applyDeviceLayout(mode){
+  const m=mode==='phone'?'phone':'desktop';
+  document.body.classList.toggle('phone-layout',m==='phone');
+  localStorage.setItem('felix_device_layout',m);
+}
+function showDeviceChoiceIfNeeded(){
+  if(localStorage.getItem('felix_device_layout')){applyDeviceLayout(localStorage.getItem('felix_device_layout'));return;}
+  openModal(`<div class="device-choice" style="text-align:center"><h2>Choose your device</h2><p class="small">This only appears once. You can change this later in Settings.</p><div class="row" style="justify-content:center;gap:10px"><button class="btn primary" onclick="applyDeviceLayout('desktop');closeModal()">Desktop / iPad</button><button class="btn" onclick="applyDeviceLayout('phone');closeModal()">Phone</button></div></div>`);
+}
+function openDeviceLayoutSettings(){
+  const current=localStorage.getItem('felix_device_layout')||'desktop';
+  openModal(`<h2>Layout</h2><p class="small">Choose how Felix Chat is arranged on this device. Nothing is removed or cropped.</p><div class="row" style="gap:10px"><button class="btn ${current==='desktop'?'primary':''}" onclick="applyDeviceLayout('desktop');openDeviceLayoutSettings()">Desktop / iPad</button><button class="btn ${current==='phone'?'primary':''}" onclick="applyDeviceLayout('phone');openDeviceLayoutSettings()">iPhone / Phone</button></div><button class="btn" style="margin-top:10px" onclick="closeModal()">Done</button>`);
+}
 
 /* LOAD USER */
 
@@ -3257,6 +3272,17 @@ connectSocket=function(){
 </script>
 
 <style>
+/* Device layout preference - additive only */
+body.phone-layout .app{min-height:100dvh}
+body.phone-layout .sidebar{width:100%;max-width:100%;border-right:0}
+body.phone-layout .app{flex-direction:column}
+body.phone-layout .chat{min-height:0;width:100%}
+body.phone-layout .sidebar{height:auto;max-height:38dvh;overflow:auto}
+body.phone-layout .chat-header{height:64px;padding:8px 12px}
+body.phone-layout .messages{padding:12px}
+body.phone-layout .composer{position:sticky;bottom:0;background:#0d1220;padding:8px}
+body.phone-layout .message{max-width:88%}
+@media(max-width:700px){body.phone-layout .sidebar{max-height:34dvh}body.phone-layout .messages{min-height:0;flex:1}body.phone-layout .composer{padding-bottom:max(8px,env(safe-area-inset-bottom))}}
 /* Felix Chat feature pack - additive UI only */
 .feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.feature-card{background:#141c2c;border:1px solid #2f3c5b;border-radius:14px;padding:12px}.feature-card h3{margin:0 0 6px}.feature-list{max-height:55vh;overflow:auto}.group-row,.search-user-row{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#141c2c;margin:7px 0;cursor:pointer}.group-row:hover,.search-user-row:hover{background:#1b2742}.role-badge{display:inline-block;margin-left:5px;padding:2px 6px;border-radius:7px;font-size:10px;font-weight:900;background:#293655;color:#fff}.role-badge.vip{background:#765f1d}.role-badge.mod{background:#24506c}.role-badge.admin{background:#5d2c72}.custom-status{color:#9ba8c2;font-size:12px;margin-top:2px}.banner-preview{width:100%;max-height:180px;object-fit:cover;border-radius:12px;margin-top:8px}.typing-live{min-height:18px;padding:3px 18px;color:#8fa1c0;font-size:12px}.reaction-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.reaction-chip{cursor:pointer}.feature-search{display:flex;gap:7px}.security-note{font-size:12px;color:#9aa6bf}
 @media(max-width:700px){.feature-grid{grid-template-columns:1fr}}
@@ -3266,7 +3292,7 @@ connectSocket=function(){
 let activeGroup=null, featureGroups=[], featureTypingTimer=null, browserNotificationsEnabled=false;
 function roleBadge(user){const r=String(user?.role||'member').toLowerCase();let out=r==='admin'?'<span class="role-badge admin">ADMIN</span>':r==='mod'?'<span class="role-badge mod">MOD</span>':r==='vip'?'<span class="role-badge vip">VIP</span>':'';if(user?.verified)out+='<span class="verified-tick" title="Verified">✓</span>';return out}
 function userLabel(user){return `@${escapeHtml(user?.username||'user')}${roleBadge(user)}`}
-function showFeatureHub(){openModal(`<h2>✨ Felix Chat Features</h2><div class="feature-grid"><button class="btn" onclick="openGroupsPanel()">👥 Group Chats</button><button class="btn" onclick="openUserSearchPanel()">🔎 User Search</button><button class="btn" onclick="editProfile()">🎨 Custom Profile</button><button class="btn" onclick="openSecurityPanel()">🔐 Account Security</button><button class="btn" onclick="openPinnedPanel()">📌 Pinned Messages</button><button class="btn" onclick="enableBrowserNotifications()">🔔 Notifications</button><button class="btn" onclick="showRequests()">👥 Friend Requests</button></div><p class="security-note" style="margin-top:14px">New features are additive and use your existing Turso + Cloudinary setup.</p><button class="btn" onclick="closeModal()">Close</button>`)}
+function showFeatureHub(){openModal(`<h2>✨ Felix Chat Features</h2><div class="feature-grid"><button class="btn" onclick="openGroupsPanel()">👥 Group Chats</button><button class="btn" onclick="openUserSearchPanel()">🔎 User Search</button><button class="btn" onclick="editProfile()">🎨 Custom Profile</button><button class="btn" onclick="openSecurityPanel()">🔐 Account Security</button><button class="btn" onclick="openDeviceLayoutSettings()">Layout</button><button class="btn" onclick="openPinnedPanel()">📌 Pinned Messages</button><button class="btn" onclick="enableBrowserNotifications()">🔔 Notifications</button><button class="btn" onclick="showRequests()">👥 Friend Requests</button></div><p class="security-note" style="margin-top:14px">New features are additive and use your existing Turso + Cloudinary setup.</p><button class="btn" onclick="closeModal()">Close</button>`)}
 function openUserSearchPanel(){openModal(`<h2>🔎 Find People</h2><div class="feature-search"><input id="featureSearchInput" class="input" placeholder="Username or name"><button class="btn primary" onclick="runFeatureSearch()">Search</button></div><div id="featureSearchResults" class="feature-list" style="margin-top:10px"></div><button class="btn" onclick="closeModal()">Done</button>`)}
 async function runFeatureSearch(){const q=($('featureSearchInput')?.value||'').trim();if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));$('featureSearchResults').innerHTML=users.length?users.map(u=>`<div class="search-user-row"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1"><b>${userLabel(u)}</b><div class="small">${escapeHtml(u.displayName||u.username)}${u.online?' · Online':''}</div></div><button class="btn primary" onclick="sendFoundFriend('${escapeHtml(u.username)}')">Add</button></div>`).join(''):'<div class="small">No users found.</div>'}catch(e){alert(e.message)}}
 async function openGroupsPanel(){try{featureGroups=await api('/groups');openModal(`<h2>👥 Group Chats</h2><button class="btn primary" onclick="createFeatureGroup()">＋ Create Group</button><div class="feature-list" style="margin-top:10px">${featureGroups.length?featureGroups.map(g=>`<div class="group-row" onclick="selectGroup('${g.gid}')"><div class="avatar">${initials(g.name)}</div><div style="flex:1"><b>${escapeHtml(g.name)}</b><div class="small">${g.members?.length||1} members</div></div>›</div>`).join(''):'<div class="small" style="margin-top:12px">No groups yet.</div>'}</div><button class="btn" onclick="closeModal()">Done</button>`)}catch(e){alert(e.message)}}
