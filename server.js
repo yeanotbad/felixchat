@@ -210,6 +210,14 @@ app.get('/api/quick-add',auth,async(req,res)=>{
   }catch(e){console.error('quick-add',e);res.status(500).json({error:'Could not load Quick Add users'});}
 });
 
+app.get('/api/users/:uid',auth,async(req,res)=>{
+  const u=await getUser(req.params.uid);
+  if(!u)return res.status(404).json({error:'User not found'});
+  const isSelf=u.uid===req.uid;
+  if(!isSelf && !(await areFriends(req.uid,u.uid)))return res.status(403).json({error:'You can only view profiles of friends.'});
+  res.json(publicUser(u,(sockets.get(u.uid)?.size||0)>0));
+});
+
 app.get('/api/users/search',auth,async(req,res)=>{
   const q=String(req.query.q||'').trim().toLowerCase();
   const r=await db.execute({sql:`SELECT * FROM users WHERE lower(username) LIKE ? OR lower(COALESCE(display_name,'')) LIKE ? ORDER BY username LIMIT 30`,args:[`%${q}%`,`%${q}%`]});
