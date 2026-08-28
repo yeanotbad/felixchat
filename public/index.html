@@ -2778,7 +2778,7 @@ if(message.type === "message_edited"){
 if(message.type === "reaction"){
   if(activeFriend && message.messageId){ loadMessages(); }
 }
-if(message.type==='group_added'){api('/groups').then(g=>{featureGroups=g;renderFriends();}).catch(()=>{});}
+if(message.type==='group_added'){api('/groups').then(g=>{featureGroups=g;renderFriends();if(message.notification)showGroupToast(message.notification);}).catch(()=>{});}
 if(message.type === "group_message"){
   if(activeGroup && message.message?.gid===activeGroup.gid) appendGroupMessage(message.message);
   if(browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid) new Notification('Felix Chat',{body:(message.message?.text||'New group message').slice(0,100)});
@@ -3359,8 +3359,9 @@ async function joinGroupCall(m){
 async function leaveGroupCall(){if(!groupCallActive)return;sendGroupCallSignal('group_call_leave',activeGroup?.gid,{groupCallId},null);resetGroupCall();callState='idle';$('callOverlay').style.display='none';}
 async function handleGroupCallMessage(m){
   if(!isGroupCallMessage(m)||!m.gid)return false;
-  if(!activeGroup||activeGroup.gid!==m.gid)return true;
-  if(m.type==='group_call_invite'){if(groupCallActive||callState!=='idle')return true;groupCallId=m.payload?.groupCallId;groupCallMode=m.callType==='video'?'video':'audio';groupCallActive=false;callState='incoming';callPeer=m.from;showCallOverlay(groupCallMode==='video'?'📹 Incoming group video call':'📞 Incoming group call','@'+(m.fromUsername||'A group member')+' started a call',true);return true;}
+  if(m.type==='group_call_invite'){if(groupCallActive||callState!=='idle')return true;groupCallId=m.payload?.groupCallId;groupCallMode=m.callType==='video'?'video':'audio';groupCallActive=false;callState='incoming';callPeer=m.from;
+    api('/groups').then(gs=>{featureGroups=gs;const g=gs.find(x=>x.gid===m.gid);if(g)activeGroup=g;}).catch(()=>{});
+    showCallOverlay(groupCallMode==='video'?'📹 Incoming group video call':'📞 Incoming group call','Getting called by '+(m.groupName||'Group'),true);return true;}
   if(m.type==='group_call_join'&&m.payload?.groupCallId===groupCallId){const u=(activeGroup.members||[]).find(x=>x.uid===m.from);const p=await createGroupPeer(m.from,true);groupCallPeers.get(m.from).label=u?.displayName||u?.username||m.from;return true;}
   if(m.type==='group_call_signal'&&m.payload?.groupCallId===groupCallId){const p=m.payload||{};let peer=groupCallPeers.get(m.from);if(!peer)await createGroupPeer(m.from,false);peer=groupCallPeers.get(m.from);if(p.kind==='offer'){await peer.pc.setRemoteDescription(new RTCSessionDescription(p.sdp));for(const c of (peer.ice||[])){try{await peer.pc.addIceCandidate(new RTCIceCandidate(c))}catch{}}const ans=await peer.pc.createAnswer();await peer.pc.setLocalDescription(ans);sendGroupCallSignal('group_call_signal',m.gid,{kind:'answer',groupCallId,sdp:ans},m.from);}else if(p.kind==='answer'){await peer.pc.setRemoteDescription(new RTCSessionDescription(p.sdp));}else if(p.kind==='ice'){if(peer.pc.remoteDescription)peer.pc.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(()=>{});else{peer.ice=peer.ice||[];peer.ice.push(p.candidate)}}return true;}
   if(m.type==='group_call_leave'&&m.payload?.groupCallId===groupCallId){removeGroupCallTile(m.from);const peer=groupCallPeers.get(m.from);try{peer?.pc.close()}catch{};groupCallPeers.delete(m.from);return true;}
@@ -3666,7 +3667,7 @@ function createGroupWizard(){newGroupSelected=new Set();openModal(`<h2>👥 Crea
 let newGroupSelected=new Set();
 async function searchGroupMembers(){renderGroupFriendPicker('newGroupMembers','newGroupMemberSearch',newGroupSelected,new Set())}
 function toggleGroupMember(uid,on){if(on)newGroupSelected.add(uid);else newGroupSelected.delete(uid);const a=$('addGroupMembersList'),c=$('newGroupMembers');if(a)renderGroupFriendPicker('addGroupMembersList','addGroupMemberSearch',newGroupSelected,new Set((activeGroup?.members||[]).map(u=>u.uid)));if(c)renderGroupFriendPicker('newGroupMembers','newGroupMemberSearch',newGroupSelected,new Set())}
-async function finishCreateGroup(){const name=$('newGroupName')?.value.trim()||'New Group';try{const g=await api('/groups',{method:'POST',body:JSON.stringify({name})});for(const uid of newGroupSelected)await api('/groups/'+g.gid+'/members',{method:'POST',body:JSON.stringify({uid})});featureGroups=await api('/groups');renderFriends();closeModal();await selectGroup(g.gid)}catch(e){alert(e.message)}}
+async function finishCreateGroup(){const name=$('newGroupName')?.value.trim()||'New Group';try{const g=await api('/groups',{method:'POST',body:JSON.stringify({name,memberIds:[...newGroupSelected]})});featureGroups=await api('/groups');renderFriends();closeModal();await selectGroup(g.gid)}catch(e){alert(e.message)}}
 window.createFeatureGroup=createGroupWizard;
 </script>
 
@@ -3813,6 +3814,7 @@ window.createFeatureGroup=createGroupWizard;
     const idx=Math.max(0,q.findIndex(x=>x.id===st.id));
     openStoryAt(q,idx<0?0:idx);
   };
+  window.openStoryAtUser=function(uid){const q=userStories(uid);if(q.length)openStoryAt(q,0);};
 
   window.showMyStories=async function(){
     try{
@@ -3857,7 +3859,7 @@ window.createFeatureGroup=createGroupWizard;
       d.className='story-card';
       d.setAttribute('role','button'); d.setAttribute('tabindex','0');
       d.innerHTML='<div class="story-ring '+(unseen?'story-unseen':'story-seen')+'"><img src="'+escapeHtml(st.avatar||'')+'" onerror="this.style.display=\'none\'"></div><div class="small">'+escapeHtml(st.displayName||st.username)+(stories.length>1?' · '+stories.length:'')+'</div>';
-      d.onclick=function(e){e.preventDefault();e.stopPropagation();viewStory(st);};
+      d.onclick=function(e){e.preventDefault();e.stopPropagation();window.openStoryAtUser?.(st.uid);};
       d.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();viewStory(st);}};
       strip.appendChild(d);
     });
@@ -3899,7 +3901,7 @@ window.createFeatureGroup=createGroupWizard;
     .story-ring.story-unseen{background:#208cff!important;box-shadow:0 0 0 2px #208cff,0 0 16px #208cff55!important;}
     .story-ring.story-seen{background:#68748a!important;box-shadow:none!important;}
     .story-ring.story-seen img,.story-ring.story-unseen img{border-color:#10182a!important;}
-    .story-viewer-box #storyViewerMedia img{cursor:pointer;}
+    .story-viewer{z-index:50000!important;pointer-events:auto!important}.story-viewer-box{z-index:50001;pointer-events:auto}.story-viewer-box #storyViewerMedia img{cursor:pointer;pointer-events:auto}.story-card{position:relative;z-index:2;pointer-events:auto}
     @media(max-width:700px){
       html,body{width:100%!important;max-width:100vw!important;overflow-x:hidden!important;}
       .app{width:100vw!important;max-width:100vw!important;height:100dvh!important;min-height:100svh!important;display:block!important;overflow:hidden!important;}
@@ -3985,5 +3987,21 @@ window.createFeatureGroup=createGroupWizard;
 </style>
 
 <script>
-(function(){const baseLoad=window.loadUser;if(typeof baseLoad==='function'){window.loadUser=async function(){await baseLoad();try{featureGroups=await api('/groups');renderFriends();}catch(e){featureGroups=[];}}}})();
+/* Group membership notifications + reliable group hydration after refresh. */
+(function(){
+  function showGroupToast(n){
+    const stack=document.getElementById('requestToastStack')||document.body;
+    const el=document.createElement('div'); el.className='request-toast group-join-toast';
+    el.innerHTML=`<b>👥 You've been added to ${escapeHtml(n.groupName||'a group')}</b><div class="small">You’ve been added to ${escapeHtml(n.groupName||'this group')}.</div><div class="request-toast-actions"><button class="btn primary" data-open-group>Open group</button><button class="btn" data-dismiss-group>Dismiss</button></div>`;
+    stack.appendChild(el);
+    el.querySelector('[data-open-group]').onclick=async()=>{try{featureGroups=await api('/groups');renderFriends();const g=featureGroups.find(x=>x.gid===n.gid);if(g)await selectGroup(g.gid);}catch(e){} el.remove();try{await api('/groups/notifications/'+encodeURIComponent(n.id)+'/read',{method:'POST',body:'{}'})}catch{}};
+    el.querySelector('[data-dismiss-group]').onclick=async()=>{el.remove();try{await api('/groups/notifications/'+encodeURIComponent(n.id)+'/read',{method:'POST',body:'{}'})}catch{}};
+    setTimeout(()=>{if(el.isConnected){el.remove();api('/groups/notifications/'+encodeURIComponent(n.id)+'/read',{method:'POST',body:'{}'}).catch(()=>{})}},10000);
+  }
+  window.showGroupToast=showGroupToast;
+  window.hydrateGroups=async function(){if(!window.me)return;try{featureGroups=await api('/groups');renderFriends();const notes=await api('/groups/notifications');notes.slice().reverse().forEach(showGroupToast);}catch(e){featureGroups=[];renderFriends();}};
+})();
+</script>
+<script>
+(function(){const baseLoad=window.loadUser;if(typeof baseLoad==='function'){window.loadUser=async function(){await baseLoad();await hydrateGroups();}};setTimeout(()=>{if(window.me)hydrateGroups();},250);})();
 </script>
