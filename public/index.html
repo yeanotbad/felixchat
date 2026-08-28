@@ -10,6 +10,16 @@ name="viewport"
 content="width=device-width,initial-scale=1"
 />
 
+
+
+<meta name="theme-color" content="#080914">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Felix Chat">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+
 <title>Felix Chat</title>
 
 <style>
@@ -3984,6 +3994,56 @@ window.createFeatureGroup=createGroupWizard;
   body:not(.mobile-chat-open) .chat{display:none!important}
 }
 </style>
+
+<style id="felix-ios-home-prompt-style">
+#iosHomePrompt{display:none;position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.58);align-items:flex-end;justify-content:center;padding:20px 16px calc(24px + env(safe-area-inset-bottom));backdrop-filter:blur(8px)}
+#iosHomePrompt.show{display:flex}
+#iosHomePrompt .ios-home-card{width:min(430px,100%);background:linear-gradient(145deg,#141a30,#0b0f20);border:1px solid #3b4670;border-radius:28px;padding:22px 20px 18px;box-shadow:0 24px 70px #000b;text-align:center}
+.ios-home-icon{width:84px;height:84px;border-radius:20px;margin:0 auto 13px;display:block;box-shadow:0 10px 28px #0008}
+#iosHomePrompt h2{margin:0 0 8px;font-size:22px}
+#iosHomePrompt p{margin:0 0 16px;color:#c2cce0;line-height:1.45}
+#iosHomePrompt .ios-steps{display:none;text-align:left;background:#0b1122;border:1px solid #2c3854;border-radius:16px;padding:12px 14px;margin:0 0 14px;color:#d9e1f2;line-height:1.55}
+#iosHomePrompt .ios-home-primary{width:100%;padding:13px;border-radius:14px;background:linear-gradient(135deg,#27a9ff,#7c4dff);color:#fff;font-weight:800;font-size:15px}
+#iosHomePrompt .ios-home-dismiss{width:100%;margin-top:8px;padding:10px;background:transparent;color:#9ba8c3;font-weight:700}
+@media (min-width:769px){#iosHomePrompt{display:none!important}}
+</style>
+<div id="iosHomePrompt" role="dialog" aria-modal="true" aria-labelledby="iosHomePromptTitle">
+  <div class="ios-home-card">
+    <img class="ios-home-icon" src="/apple-touch-icon.png" alt="Felix Chat icon">
+    <h2 id="iosHomePromptTitle">Add Felix Chat to your Home Screen</h2>
+    <p>Get the Felix Chat app icon and open Felix Chat like a real app.</p>
+    <div class="ios-steps" id="iosHomeSteps">1. Tap the <b>Share</b> button in Safari.<br>2. Scroll down and tap <b>Add to Home Screen</b>.<br>3. Tap <b>Add</b>, then open Felix Chat from the new icon.</div>
+    <button class="ios-home-primary" id="iosHomeShowSteps">Show me how</button>
+    <button class="ios-home-dismiss" id="iosHomeDismiss">Not now</button>
+  </div>
+</div>
+<script id="felix-ios-home-prompt">
+(function(){
+  const isiOS=/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  const standalone=window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+  const key='felix_ios_home_prompt_seen_v1';
+  if(!isiOS || standalone || localStorage.getItem(key)) return;
+  function markSeen(){try{localStorage.setItem(key,'1')}catch(e){}}
+  window.addEventListener('load',()=>{
+    setTimeout(()=>{
+      const prompt=document.getElementById('iosHomePrompt');
+      if(prompt){ prompt.classList.add('show'); markSeen(); }
+    },700);
+  },{once:true});
+  document.getElementById('iosHomeShowSteps')?.addEventListener('click',()=>{
+    markSeen();
+    const steps=document.getElementById('iosHomeSteps');
+    if(steps) steps.style.display='block';
+    document.getElementById('iosHomeShowSteps').style.display='none';
+    document.getElementById('iosHomeDismiss').textContent='Got it';
+  });
+  document.getElementById('iosHomeDismiss')?.addEventListener('click',()=>{
+    markSeen();
+    document.getElementById('iosHomePrompt')?.classList.remove('show');
+  });
+})();
+</script>
+
 </body>
 
 <style>
@@ -4168,5 +4228,116 @@ window.createFeatureGroup=createGroupWizard;
  const old=window.renderFriends;
  if(typeof old==='function'&&!window.__mobileRenderFix){window.__mobileRenderFix=true;window.renderFriends=function(){const r=old.apply(this,arguments);setTimeout(fix,0);return r;};}
  setTimeout(fix,500);
+})();
+</script>
+
+<!-- iOS conversation-only view: additive, desktop and existing features stay unchanged -->
+<style id="felix-ios-conversation-only">
+/* Only activated by the iOS script below. */
+body.felix-ios-chat-open .chat{
+  display:flex!important;
+  position:fixed!important;
+  inset:0!important;
+  width:100vw!important;
+  max-width:100vw!important;
+  height:100dvh!important;
+  z-index:60000!important;
+  flex-direction:column!important;
+  background:#080914!important;
+  overflow:hidden!important;
+}
+body.felix-ios-chat-open .sidebar{display:none!important}
+body.felix-ios-chat-open .mobile-nav{display:none!important}
+body.felix-ios-chat-open .mobile-back{
+  display:flex!important;
+  position:absolute!important;
+  left:max(8px,env(safe-area-inset-left))!important;
+  top:max(8px,env(safe-area-inset-top))!important;
+  width:42px!important;
+  height:42px!important;
+  align-items:center!important;
+  justify-content:center!important;
+  z-index:60010!important;
+  border-radius:12px!important;
+  background:#151e33!important;
+  border:1px solid #2c3854!important;
+  color:#fff!important;
+  font-size:28px!important;
+  line-height:1!important;
+}
+body.felix-ios-chat-open .chat-header{
+  flex:0 0 auto!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:calc(58px + env(safe-area-inset-top))!important;
+  height:calc(58px + env(safe-area-inset-top))!important;
+  padding:env(safe-area-inset-top) 12px 8px 62px!important;
+}
+body.felix-ios-chat-open .messages{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  width:100%!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  -webkit-overflow-scrolling:touch!important;
+  overscroll-behavior:contain!important;
+}
+body.felix-ios-chat-open .composer,
+body.felix-ios-chat-open .input-row{
+  flex:0 0 auto!important;
+  width:100%!important;
+  min-width:0!important;
+  padding-bottom:max(8px,env(safe-area-inset-bottom))!important;
+  background:#080914!important;
+}
+body.felix-ios-chat-open #messageInput{font-size:16px!important}
+</style>
+<script id="felix-ios-conversation-only-script">
+(function(){
+  var ua=navigator.userAgent||'';
+  var isIOS=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(!isIOS) return; // This behavior is intentionally iOS/iPadOS only.
+  document.body.classList.add('felix-ios-device');
+
+  function openConversation(){
+    document.body.classList.add('felix-ios-chat-open','mobile-chat-open');
+    var input=document.getElementById('messageInput');
+    if(input){setTimeout(function(){input.disabled=false;input.focus({preventScroll:true});},80);}
+  }
+  function closeConversation(){
+    document.body.classList.remove('felix-ios-chat-open','mobile-chat-open');
+    var input=document.getElementById('messageInput');
+    if(input) input.blur();
+    var sidebar=document.querySelector('.sidebar');
+    if(sidebar) sidebar.scrollTop=0;
+  }
+  window.mobileShowChats=closeConversation;
+  window.felixIOSOpenConversation=openConversation;
+
+  // Wrap the final current selectors so direct chats and group chats both open
+  // as a conversation-only screen on iPhone/iPad.
+  var friendBase=window.selectFriend;
+  if(typeof friendBase==='function'&&!window.__felixIOSFriendWrapped){
+    window.__felixIOSFriendWrapped=true;
+    window.selectFriend=async function(friend){
+      var result=await friendBase.apply(this,arguments);
+      openConversation();
+      return result;
+    };
+  }
+  var groupBase=window.selectGroup;
+  if(typeof groupBase==='function'&&!window.__felixIOSGroupWrapped){
+    window.__felixIOSGroupWrapped=true;
+    window.selectGroup=async function(gid){
+      var result=await groupBase.apply(this,arguments);
+      openConversation();
+      return result;
+    };
+  }
+
+  // Native-style swipe from the left edge to go back to the chat/menu screen.
+  var startX=0,startY=0;
+  document.addEventListener('touchstart',function(e){if(document.body.classList.contains('felix-ios-chat-open')){var t=e.touches[0];startX=t.clientX;startY=t.clientY;}},{passive:true});
+  document.addEventListener('touchend',function(e){if(!document.body.classList.contains('felix-ios-chat-open'))return;var t=e.changedTouches[0];var dx=t.clientX-startX,dy=t.clientY-startY;if(startX<28&&dx>90&&Math.abs(dx)>Math.abs(dy)*1.5)closeConversation();},{passive:true});
 })();
 </script>
