@@ -4087,3 +4087,71 @@ window.createFeatureGroup=createGroupWizard;
  window.hydrateGroups=async function(){try{await oldHydrate?.();featureGroups=await api('/groups');renderFriends();}catch(e){console.warn(e)}};
 })();
 </script>
+<style>
+/* FINAL RESPONSIVE LAYOUT PATCH — additive, keeps existing features */
+@media (min-width: 769px){
+  body{overflow:hidden}
+  .sidebar{width:270px;padding:11px;gap:7px;overflow:auto}
+  .logo{font-size:22px;margin-bottom:2px}
+  .profile{padding:8px}
+  .avatar{width:38px;height:38px}
+  .btn{padding:9px 10px;border-radius:10px}
+  .friend{padding:8px;min-height:54px}
+  .chat-header{height:62px;padding:8px 14px}
+  .messages{padding:12px;gap:8px}
+  .snap-toolbar{gap:5px}
+  .snap-toolbar .btn{padding:8px;font-size:11px}
+}
+@media (max-width: 768px){
+  html,body{width:100%;max-width:100%;height:100%;height:100dvh;overflow:hidden!important}
+  body{position:fixed;inset:0}
+  .app{width:100vw!important;max-width:100vw!important;height:100dvh!important;overflow:hidden;display:block!important}
+  .sidebar{display:flex!important;width:100vw!important;max-width:100vw!important;height:100dvh!important;padding:10px 12px calc(76px + env(safe-area-inset-bottom))!important;gap:8px!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch}
+  .sidebar>*{max-width:100%;min-width:0}
+  .friends{display:block!important;width:100%!important;flex:none!important;overflow:visible!important;min-height:100px!important;max-height:none!important}
+  .friend{width:100%!important;min-height:58px!important;padding:9px!important;margin:2px 0!important}
+  .friend-info{min-width:0!important;overflow:hidden}
+  .friend-info b,.friend-info .small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .snap-toolbar{width:100%;grid-template-columns:1fr 1fr!important;gap:7px!important}
+  .snap-toolbar .btn,.sidebar>.btn{min-height:46px!important}
+  .sidebar .profile{min-height:56px!important}
+  .chat{width:100vw!important;max-width:100vw!important;height:100dvh!important;min-width:0!important}
+  body.mobile-chat-open .chat{display:flex!important}
+  body.mobile-chat-open .sidebar{display:none!important}
+  .chat-header{width:100%!important;min-width:0!important;height:62px!important;min-height:62px!important;padding:8px 12px 8px 60px!important}
+  .messages{width:100%!important;min-width:0!important;padding:10px!important;overflow-x:hidden!important}
+  .message{max-width:84%!important;overflow-wrap:anywhere}
+  .input-row{width:100%!important;min-width:0!important;padding:8px!important;padding-bottom:calc(8px + env(safe-area-inset-bottom))!important}
+  .message-input{min-width:0!important;width:1px!important;flex:1 1 auto!important}
+  .mobile-nav{display:flex!important}
+}
+.mobile-nav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:9999;padding:7px 10px calc(7px + env(safe-area-inset-bottom));background:#0d1220ee;border-top:1px solid #293650;backdrop-filter:blur(16px);gap:7px}
+.mobile-nav button{flex:1;min-width:0;background:#151e33;color:#fff;border:1px solid #2c3854;border-radius:12px;padding:10px 5px;font-size:12px;font-weight:700}
+.mobile-nav button:active{transform:scale(.97)}
+</style>
+<div class="mobile-nav" id="mobileNav" aria-label="Mobile navigation">
+  <button onclick="mobileGo('friends')">💬 Chats</button>
+  <button onclick="mobileGo('requests')">👥 Friends</button>
+  <button onclick="mobileGo('groups')">👨‍👩‍👧 Groups</button>
+  <button onclick="mobileGo('menu')">☰ Menu</button>
+</div>
+<script>
+(function(){
+ window.mobileGo=function(where){
+   if(document.body.classList.contains('mobile-chat-open')) document.body.classList.remove('mobile-chat-open');
+   const map={friends:'friends',requests:null,groups:'friends',menu:null};
+   if(where==='requests'){ if(typeof showRequests==='function'){showRequests();return;} }
+   if(where==='groups'){
+     const all=[...document.querySelectorAll('#friends .group-friend')];
+     (all[0]||document.getElementById('friends'))?.scrollIntoView({behavior:'smooth',block:'start'}); return;
+   }
+   if(where==='menu'){ const target=document.querySelector('.snap-toolbar')||document.querySelector('#quickSearch'); target?.scrollIntoView({behavior:'smooth',block:'start'}); return; }
+   document.getElementById(map[where]||'friends')?.scrollIntoView({behavior:'smooth',block:'start'});
+ };
+ // Ensure the friend/group list is never hidden by old mobile CSS after rerenders.
+ const fix=function(){const f=document.getElementById('friends');if(f){f.style.display='block';f.style.width='100%';}};
+ const old=window.renderFriends;
+ if(typeof old==='function'&&!window.__mobileRenderFix){window.__mobileRenderFix=true;window.renderFriends=function(){const r=old.apply(this,arguments);setTimeout(fix,0);return r;};}
+ setTimeout(fix,500);
+})();
+</script>
