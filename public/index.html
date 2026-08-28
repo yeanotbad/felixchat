@@ -1436,6 +1436,107 @@ button:focus-visible,input:focus-visible{
 })();
 </script>
 
+
+<style id="felix-requested-layout-fix">
+/* Slightly wider left menu */
+.sidebar{width:360px!important}
+
+/* Profile through Stories and the rest of the shortcut menu sit beside each other */
+.snap-toolbar{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:8px!important;
+  width:100%!important;
+}
+.snap-toolbar .btn{width:100%!important;margin:0!important}
+
+/* Give profile content more room */
+.profile-fullscreen-modal .modal-box,
+.modal-box.profile-modal,
+#modalBox.profile-modal{
+  width:min(1180px,96vw)!important;
+  max-width:1180px!important;
+  padding:30px 38px!important;
+}
+.profile-fullscreen-modal .profile-content,
+.profile-fullscreen-modal .profile-main,
+.modal-box .profile-content{
+  gap:24px!important;
+  padding:12px!important;
+}
+
+/* Friends remain one normal vertical list */
+.friends{display:block!important}
+.friends .friend{display:flex!important;width:100%!important}
+
+@media(max-width:700px){
+  .sidebar{width:100%!important}
+  .snap-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .profile-fullscreen-modal .modal-box,.modal-box.profile-modal,#modalBox.profile-modal{
+    width:100vw!important;max-width:100vw!important;padding:20px 16px!important
+  }
+}
+</style>
+<script id="felix-chat-autofocus-fix">
+(function(){
+  function focusComposer(){
+    const input=document.getElementById('messageInput');
+    if(!input) return;
+    input.disabled=false;
+    setTimeout(()=>input.focus({preventScroll:true}),60);
+  }
+  const oldSelect=window.selectFriend;
+  if(oldSelect){
+    window.selectFriend=async function(friend){
+      const result=await oldSelect(friend);
+      focusComposer();
+      return result;
+    };
+  }else{
+    document.addEventListener('DOMContentLoaded',()=>{
+      const retry=setInterval(()=>{
+        if(window.selectFriend){
+          const base=window.selectFriend;
+          window.selectFriend=async function(friend){
+            const result=await base(friend);
+            focusComposer();
+            return result;
+          };
+          clearInterval(retry);
+        }
+      },100);
+    });
+  }
+})();
+</script>
+
+
+<style id="felix-exact-4-plus-4">
+/* Exact column-major shortcut layout: first four go straight down,
+   second group goes straight down immediately beside them. */
+.snap-toolbar{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  align-items:start!important;
+  gap:10px!important;
+  width:100%!important;
+}
+.snap-toolbar .snap-column{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:10px!important;
+  min-width:0!important;
+}
+.snap-toolbar .snap-column .btn{
+  width:100%!important;
+  margin:0!important;
+}
+@media(max-width:700px){
+  .snap-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  .snap-toolbar .snap-column{gap:7px!important}
+}
+</style>
+
 </head>
 
 <body>
@@ -1502,13 +1603,17 @@ class="friends"
 
 
 <div class="snap-toolbar">
-<button class="btn" onclick="showStories()">Stories</button>
-<button class="btn" onclick="createStory()">Add Story</button>
-<button class="btn" onclick="searchUsers()">Find People</button>
-<button class="btn" onclick="editProfile()">Profile</button>
-<button id="adminBtn" class="btn" style="display:none" onclick="openAdminPanel()">Admin</button>
-<button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">Mod Tools</button>
-<button class="btn" onclick="openQuickAdd()">Quick Add</button>
+  <div class="snap-column snap-column-left">
+    <button class="btn" onclick="showStories()">Stories</button>
+    <button class="btn" onclick="createStory()">Add Story</button>
+    <button class="btn" onclick="searchUsers()">Find People</button>
+    <button class="btn" onclick="editProfile()">Profile</button>
+  </div>
+  <div class="snap-column snap-column-right">
+    <button id="adminBtn" class="btn" style="display:none" onclick="openAdminPanel()">Admin</button>
+    <button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">Mod Tools</button>
+    <button class="btn" onclick="openQuickAdd()">Quick Add</button>
+  </div>
 </div>
 <label class="snap-toggle"><input id="disappearingToggle" type="checkbox"> Disappearing messages (24h)</label>
 <div class="snap-search"><input id="quickSearch" class="input" placeholder="Search users..." onkeydown="if(event.key==='Enter')searchUsers()"></div>
@@ -2237,6 +2342,8 @@ false;
 renderFriends();
 
 loadMessages();
+
+setTimeout(()=>{ const input=$("messageInput"); if(input){ input.disabled=false; input.focus({preventScroll:true}); } },50);
 
 }
 
