@@ -358,7 +358,7 @@ max-width:90%;
 .request-toast-actions{display:flex;gap:7px}
 .request-toast-actions button{flex:1}
 @media(max-width:600px){.quick-add-grid{grid-template-columns:1fr}.request-toast-stack{left:10px;right:10px;bottom:10px;max-width:none}}
-</style>
+.feature-typing{font-size:12px;color:#8f9db7;min-height:17px}.message-read-state{font-size:10px;color:#7f8da8;margin-top:3px;text-align:right}.profile-link{cursor:pointer}.profile-modal-banner{width:100%;height:130px;object-fit:cover;border-radius:14px;background:#11192c}.profile-modal-avatar{width:84px;height:84px;border-radius:50%;margin-top:-42px;border:4px solid #10182a;background:#11192c;position:relative}.activity-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#68748a;margin-right:6px}.activity-dot.online{background:#49e79a;box-shadow:0 0 8px #49e79a}.profile-card{background:#11192c;border:1px solid #2c3854;border-radius:16px;padding:14px}.profile-stat{color:#aab6cf;font-size:12px;margin-top:5px}
 
 
 <style>
@@ -1449,12 +1449,8 @@ id="friendAvatar"
 Felix Chat
 </b>
 
-<div
-class="small"
-id="friendStatus"
->
-Choose a friend
-</div>
+<div class="small" id="friendStatus">Choose a friend</div>
+<div id="featureTypingIndicator" class="feature-typing"></div>
 
 </div>
 
@@ -1862,7 +1858,7 @@ element.innerHTML = `
 
 <div class="friend-info">
 
-<b>
+<b class="profile-link" onclick="event.stopPropagation();openUserProfile('${friend.uid}')">
 @${friend.username}${friend.verified ? '<span class="verified-tick">✓</span>' : ''}${Number(friend.streak||0)>0 ? `<span class="streak-badge active">🔥 ${Number(friend.streak)}</span>` : ''}
 </b>
 
@@ -2293,6 +2289,11 @@ function messageBubble(message){
   }
 
   if(message.from===me.uid){
+    const read=document.createElement("div");
+    read.className="message-read-state";
+    read.textContent=message.readAt ? "Seen" : "Sent";
+    read.dataset.readState=message.id;
+    bubble.appendChild(read);
     const tools=document.createElement("div");
     tools.className="message-tools";
     const del=document.createElement("button");
@@ -2310,6 +2311,7 @@ function appendMessage(message,scroll=true){
   const empty=$("messages").querySelector(".empty");
   if(empty) empty.remove();
   $("messages").appendChild(messageBubble(message));
+  if(message.from!==me.uid) markMessageRead(message.id);
   if(scroll) $("messages").scrollTop=$("messages").scrollHeight;
 }
 
@@ -2326,6 +2328,7 @@ async function loadMessages(){
     const fragment=document.createDocumentFragment();
     messages.forEach(message=>fragment.appendChild(messageBubble(message)));
     container.appendChild(fragment);
+    messages.filter(m=>m.from!==me.uid && !m.readAt).forEach(m=>markMessageRead(m.id));
     container.scrollTop=container.scrollHeight;
   }catch(error){ console.log(error); }
 }
@@ -2556,6 +2559,7 @@ if(message.type === "message"){
   }
 }
 
+if(message.type === "message_read"){ updateReadState(message.messageId); }
 if(message.type === "message_deleted"){
   removeMessage(message.messageId);
 }
@@ -3330,6 +3334,16 @@ setInterval(()=>{if(!me||!socket)return},5000);
 let screenshotCooldown=0;
 async function reportScreenshot(){const target=callPeer||activeFriend?.uid;if(!target||Date.now()-screenshotCooldown<3000)return;screenshotCooldown=Date.now();try{await api('/screenshot/'+target,{method:'POST',body:JSON.stringify({context:callPeer?'call':'chat'})})}catch{}}
 window.addEventListener('keydown',e=>{if(e.key==='PrintScreen'&&(activeFriend||callPeer))reportScreenshot();});
+
+async function markMessageRead(messageId){
+  if(!activeFriend||!messageId)return;
+  try{await api('/messages/'+activeFriend.uid+'/'+messageId+'/read',{method:'POST'});}catch{}
+}
+function updateReadState(messageId){const el=document.querySelector(`[data-read-state="${CSS.escape(messageId)}"]`);if(el)el.textContent='Seen';}
+function formatLastSeen(ts){if(!ts)return 'Last online: unknown';const d=Date.now()-Number(ts);if(d<60000)return 'Last online: just now';if(d<3600000)return 'Last online: '+Math.floor(d/60000)+' min ago';if(d<86400000)return 'Last online: '+Math.floor(d/3600000)+' hr ago';return 'Last online: '+new Date(Number(ts)).toLocaleString();}
+async function openUserProfile(uid){
+  try{const u=await api('/users/'+encodeURIComponent(uid));const online=!!u.online;openModal(`<div class="profile-card"><button class="btn" style="float:right" onclick="closeModal()">Close</button>${u.banner?`<img class="profile-modal-banner" src="${escapeHtml(u.banner)}">`:''}<div class="profile-modal-avatar">${avatarMarkup(u)}</div><h2 style="margin:8px 0 2px">${userLabel(u)}</h2><div class="profile-stat"><span class="activity-dot ${online?'online':''}"></span>${online?'Online now':formatLastSeen(u.lastSeen)}</div>${u.statusText?`<p>${escapeHtml(u.statusText)}</p>`:''}<p>${escapeHtml(u.bio||'No bio yet.')}</p>${Number(u.streak||0)>0?`<div class="profile-stat">🔥 ${Number(u.streak)} day friend streak</div>`:''}</div>`);}catch(e){alert(e.message)}
+}
 
 /* Add a features button once the DOM is ready. */
 (function addFeatureButton(){const bar=document.querySelector('.snap-toolbar');if(bar&&!$('featureHubBtn')){const b=document.createElement('button');b.id='featureHubBtn';b.className='btn';b.textContent='✨ More Features';b.onclick=showFeatureHub;bar.appendChild(b)}})();
