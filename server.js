@@ -77,7 +77,9 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS poll_votes (poll_id TEXT NOT NULL, uid TEXT NOT NULL, option_index INTEGER NOT NULL, voted_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`,
     `CREATE TABLE IF NOT EXISTS poll_views (poll_id TEXT NOT NULL, uid TEXT NOT NULL, viewed_at INTEGER NOT NULL, PRIMARY KEY(poll_id, uid))`,
     `CREATE TABLE IF NOT EXISTS system_status (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`,
-    `CREATE TABLE IF NOT EXISTS push_subscriptions (endpoint TEXT PRIMARY KEY, uid TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL)`
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (endpoint TEXT PRIMARY KEY, uid TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS collectibles (id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL,rarity TEXT NOT NULL,value TEXT DEFAULT '',staff_only INTEGER DEFAULT 1,mod_grantable INTEGER DEFAULT 0,created_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS user_collectibles (uid TEXT NOT NULL,collectible_id TEXT NOT NULL,granted_by TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(uid,collectible_id))`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -95,6 +97,9 @@ async function init() {
   // The @felixchat account is the sole owner of the admin powers.
   // This does not change any other account's role.
   try { await db.execute({sql:`UPDATE users SET role='admin' WHERE username='felixchat'`,args:[]}); } catch (e) {}
+  const starter=[['legend','LEGEND','tag','mythic','rainbow',1,0],['og','OG','tag','legendary','gold',1,1],['neon','NEON','name_effect','epic','neon',1,1],['fire','FIRE','name_effect','legendary','fire',1,0],['early','EARLY USER','tag','rare','blue',1,1],['halo','HALO','profile_frame','epic','halo',1,1]];
+  for(const x of starter) try{await db.execute({sql:'INSERT OR IGNORE INTO collectibles(id,name,type,rarity,value,staff_only,mod_grantable,created_at) VALUES(?,?,?,?,?,?,?,?)',args:[...x,now()]})}catch(e){}
+
 }
 
 app.use(express.json({ limit: '5mb' }));
@@ -664,4 +669,38 @@ wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JS
 
 setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM polls WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
-init().then(()=>server.listen(PORT,()=>console.log('Felix Chat running on '+PORT))).catch(e=>{console.error('DB init failed',e);process.exit(1);});
+init().then(()=>
+// Collectibles, staff-issued tags, polls, themes and chat mini-games.
+app.get('/api/collectibles/me', auth, async (req,res)=>{
+  const rows=await db.execute({sql:`SELECT c.* FROM user_collectibles uc JOIN collectibles c ON c.id=uc.collectible_id WHERE uc.uid=? ORDER BY uc.created_at DESC`,args:[req.uid]});
+  res.json({items:rows.rows});
+});
+app.get('/api/collectibles', auth, async (req,res)=>{
+  const rows=await db.execute(`SELECT id,name,type,rarity,value,staff_only FROM collectibles ORDER BY created_at DESC`);
+  res.json({items:rows.rows});
+});
+app.post('/api/collectibles/:id/grant', auth, async (req,res)=>{
+  const actor=await getUser(req.uid), item=(await db.execute({sql:'SELECT * FROM collectibles WHERE id=?',args:[req.params.id]})).rows[0];
+  if(!item)return res.status(404).json({error:'Not found'});
+  const target=String(req.body.uid||''); const isDev=actor.role==='admin'||actor.role==='developer';
+  if(!(isDev || (actor.role==='mod' && Number(item.mod_grantable)===1)))return res.status(403).json({error:'Not allowed'});
+  await db.execute({sql:'INSERT OR IGNORE INTO user_collectibles(uid,collectible_id,granted_by,created_at) VALUES(?,?,?,?)',args:[target,item.id,req.uid,now()]});
+  res.json({ok:true});
+});
+app.post('/api/collectibles/:id/revoke', auth, async (req,res)=>{
+  const actor=await getUser(req.uid); if(!['admin','developer'].includes(actor.role))return res.status(403).json({error:'Not allowed'});
+  await db.execute({sql:'DELETE FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[String(req.body.uid||''),req.params.id]}); res.json({ok:true});
+});
+app.get('/api/polls', auth, async (req,res)=>{
+  const rows=await db.execute({sql:'SELECT * FROM polls WHERE expires_at>? ORDER BY created_at DESC LIMIT 50',args:[now()]}); res.json({polls:rows.rows});
+});
+app.post('/api/polls', auth, async (req,res)=>{
+  const q=String(req.body.question||'').trim().slice(0,160), options=Array.isArray(req.body.options)?req.body.options.map(x=>String(x).trim().slice(0,60)).filter(Boolean).slice(0,8):[];
+  if(!q||options.length<2)return res.status(400).json({error:'Need question and 2 options'});
+  const pid=id(); await db.execute({sql:'INSERT INTO polls(id,creator_id,question,options_json,created_at,expires_at) VALUES(?,?,?,?,?,?)',args:[pid,req.uid,q,JSON.stringify(options),now(),now()+7*86400000]}); res.json({id:pid});
+});
+app.post('/api/polls/:id/vote', auth, async(req,res)=>{
+  await db.execute({sql:'INSERT OR REPLACE INTO poll_votes(poll_id,uid,option_index,voted_at) VALUES(?,?,?,?)',args:[req.params.id,req.uid,Number(req.body.option),now()]});res.json({ok:true});
+});
+app.get('/api/games',auth,async(req,res)=>res.json({games:['Tic Tac Toe','Rock Paper Scissors','Connect 4','Trivia']}));
+server.listen(PORT,()=>console.log('Felix Chat running on '+PORT))).catch(e=>{console.error('DB init failed',e);process.exit(1);});
