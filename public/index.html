@@ -4044,6 +4044,24 @@ window.createFeatureGroup=createGroupWizard;
 })();
 </script>
 
+
+<style id="felix-collectibles-ui">
+.felix-tools{position:fixed;right:12px;bottom:72px;z-index:70000;display:flex;gap:7px;flex-wrap:wrap;max-width:260px}.felix-tools button{border:1px solid #42507a;border-radius:12px;background:#11182b;color:white;padding:9px 11px}.felix-tags{display:flex;gap:4px;flex-wrap:wrap}.felix-tag{font-size:10px;font-weight:900;padding:3px 7px;border-radius:999px;background:#253c69}.felix-tag.rainbow{background:linear-gradient(90deg,#ff4d7d,#ffcc4d,#6cff8d,#4db8ff,#bd70ff);color:#111}.felix-poll{padding:12px;border:1px solid #33405e;border-radius:14px;margin:8px 0}
+</style>
+<script id="felix-new-features">
+(function(){
+const token=()=>localStorage.getItem('felix_token')||localStorage.getItem('token');
+async function api(url,method='GET',body){let r=await fetch(url,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},body:body?JSON.stringify(body):undefined});return r.json()}
+function btn(t,fn){let b=document.createElement('button');b.textContent=t;b.onclick=fn;return b}
+let box=document.createElement('div');box.className='felix-tools';box.append(
+ btn('🗳 Poll',async()=>{let q=prompt('Poll question?');let o=prompt('Options separated by |');if(q&&o)await api('/api/polls','POST',{question:q,options:o.split('|')})}),
+ btn('🎮 Games',async()=>{let g=await api('/api/games');alert('Games: '+g.games.join(', ')+'\nChoose a game idea to send as a challenge.');}),
+ btn('🎨 Theme',()=>{let c=prompt('Chat theme: dark, ocean, neon, sunset, pixel','dark');if(c){document.documentElement.dataset.felixTheme=c;localStorage.setItem('felix_theme',c)}}),
+ btn('🤖 Felix Bot',()=>alert('Felix Bot commands:\n/help\n/poll\n/roll\n/coinflip\n/8ball\nAdmins: /kick /mute /lock /unlock /announce'))
+);document.addEventListener('DOMContentLoaded',()=>document.body.append(box));
+window.addEventListener('load',async()=>{let me=await api('/api/collectibles/me').catch(()=>null);if(me?.items?.length){document.querySelectorAll('.profile-tags,.user-badges,.badges').forEach(el=>me.items.forEach(x=>{let s=document.createElement('span');s.className='felix-tag '+(x.value==='rainbow'?'rainbow':'');s.textContent=x.name;el.append(s)}));}});
+})();
+</script>
 </body>
 
 <style>
