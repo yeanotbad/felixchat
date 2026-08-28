@@ -3570,7 +3570,7 @@ body.phone-layout .messages{padding:12px}
 body.phone-layout .composer{position:sticky;bottom:0;background:#0d1220;padding:8px}
 body.phone-layout .message{max-width:88%}
 @media(max-width:700px){body.phone-layout .sidebar{max-height:34dvh}body.phone-layout .messages{min-height:0;flex:1}body.phone-layout .composer{padding-bottom:max(8px,env(safe-area-inset-bottom))}}
-.group-selected{display:flex;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #2c3854;border-radius:12px;background:#0d1322;min-height:46px;margin-bottom:8px}.group-selected-chip{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:10px;background:#1b2742;border:1px solid #34415d}.group-selected-chip .avatar{width:28px;height:28px;font-size:11px}.group-selected-chip button{background:transparent;color:#fff;font-size:16px;padding:0 3px}.search-user-row>span{margin-left:auto;color:#8f9db7;font-weight:800}
+.group-system-message{text-align:center;margin:10px auto;padding:7px 12px;border-radius:999px;background:#141c2c;border:1px solid #2f3c5b;color:#9ba8c2;font-size:12px;max-width:80%;}.group-selected{display:flex;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #2c3854;border-radius:12px;background:#0d1322;min-height:46px;margin-bottom:8px}.group-selected-chip{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:10px;background:#1b2742;border:1px solid #34415d}.group-selected-chip .avatar{width:28px;height:28px;font-size:11px}.group-selected-chip button{background:transparent;color:#fff;font-size:16px;padding:0 3px}.search-user-row>span{margin-left:auto;color:#8f9db7;font-weight:800}
 /* Felix Chat feature pack - additive UI only */
 .feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.feature-card{background:#141c2c;border:1px solid #2f3c5b;border-radius:14px;padding:12px}.feature-card h3{margin:0 0 6px}.feature-list{max-height:55vh;overflow:auto}.group-row,.search-user-row{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#141c2c;margin:7px 0;cursor:pointer}.group-row:hover,.search-user-row:hover{background:#1b2742}.role-badge{display:inline-block;margin-left:5px;padding:2px 6px;border-radius:7px;font-size:10px;font-weight:900;background:#293655;color:#fff}.role-badge.vip{background:#765f1d}.role-badge.mod{background:#24506c}.role-badge.admin{background:#5d2c72}.custom-status{color:#9ba8c2;font-size:12px;margin-top:2px}.banner-preview{width:100%;max-height:180px;object-fit:cover;border-radius:12px;margin-top:8px}.typing-live{min-height:18px;padding:3px 18px;color:#8fa1c0;font-size:12px}.reaction-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.reaction-chip{cursor:pointer}.feature-search{display:flex;gap:7px}.security-note{font-size:12px;color:#9aa6bf}
 @media(max-width:700px){.feature-grid{grid-template-columns:1fr}}
@@ -3596,10 +3596,40 @@ async function createFeatureGroup(){const name=prompt('Group name:','New Group')
 async function selectGroup(gid){const groups=featureGroups.length?featureGroups:await api('/groups');const g=groups.find(x=>x.gid===gid);if(!g)return;activeGroup=g;activeFriend=null;closeModal();$('friendName').innerHTML=escapeHtml(g.name);$('friendStatus').textContent=`👥 ${g.members?.length||1} members`;$('featureTypingIndicator').textContent='';if($('friendAvatar'))$('friendAvatar').innerHTML=initials(g.name);updateCallActionsForContext();$('messageInput').disabled=false;const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openGroupManage()" title="Group options">⋮</button>';await loadGroupMessages(gid);renderFriends()}
 async function openGroupManage(){if(!activeGroup)return;const fresh=(await api('/groups')).find(g=>g.gid===activeGroup.gid);if(fresh)activeGroup=fresh;const isOwner=activeGroup.owner_id===me.uid;openModal(`<h2>👥 ${escapeHtml(activeGroup.name)}</h2><p class="small">${activeGroup.members?.length||1} members</p><button class="btn primary" style="width:100%" onclick="addGroupMemberWizard()">＋ Add people to group</button><button class="btn" style="width:100%;margin-top:8px" onclick="leaveCurrentGroup()">Leave group</button>${isOwner?'<p class="small">Leaving does not delete the group, even if you are the owner.</p>':''}<div class="feature-list" style="margin-top:12px">${(activeGroup.members||[]).map(u=>`<div class="search-user-row"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1"><b>${userLabel(u)}</b>${u.uid===activeGroup.owner_id?'<div class="small">Owner</div>':''}</div>${isOwner&&u.uid!==me.uid?`<button class="btn" onclick="removeGroupMember('${activeGroup.gid}','${u.uid}')">Remove</button>`:''}</div>`).join('')}</div>`)}
 async function removeGroupMember(gid,uid){try{await api('/groups/'+gid+'/members/remove',{method:'POST',body:JSON.stringify({uid})});featureGroups=await api('/groups');activeGroup=featureGroups.find(x=>x.gid===gid)||activeGroup;renderFriends();openGroupManage()}catch(e){alert(e.message)}}
-async function leaveCurrentGroup(){if(!activeGroup)return;if(!confirm(`Leave ${activeGroup.name}?`))return;const gid=activeGroup.gid;try{await api('/groups/'+gid+'/leave',{method:'DELETE'});activeGroup=null;featureGroups=await api('/groups');activeFriend=null;renderFriends();$('friendName').textContent='Select a friend';$('friendStatus').textContent='';$('messages').innerHTML='<div class="empty">Choose a friend to start chatting.</div>';updateCallActionsForContext();const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button>';closeModal()}catch(e){alert(e.message)}}
+async function leaveCurrentGroup(){
+  if(!activeGroup)return;
+  if(!confirm(`Leave ${activeGroup.name}?`))return;
+  const gid=activeGroup.gid;
+  const leftGroupName=activeGroup.name;
+  try{
+    await api('/groups/'+encodeURIComponent(gid)+'/leave',{method:'DELETE'});
+    // Refresh from the server so the departed group is immediately removed from this user's list.
+    featureGroups=await api('/groups');
+    activeGroup=null;
+    activeFriend=null;
+    renderFriends();
+    $('friendName').textContent='Select a friend';
+    $('friendStatus').textContent='';
+    $('messages').innerHTML='<div class="empty">You left '+escapeHtml(leftGroupName)+'.</div>';
+    updateCallActionsForContext();
+    const fa=document.querySelector('.friend-actions');
+    if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button>';
+    closeModal();
+  }catch(e){alert(e.message||'Could not leave group. Please try again.')}
+}
 async function addGroupMemberWizard(){if(!activeGroup)return;newGroupSelected=new Set();const excluded=new Set((activeGroup.members||[]).map(u=>u.uid));openModal(`<h2>👥 Add people to ${escapeHtml(activeGroup.name)}</h2><p class="small">Only your friends are shown. Select people and they will stack below.</p>${groupPicker('addGroupMembersList','addGroupMemberSearch')}<div class="row"><button class="btn" onclick="openGroupManage()">Cancel</button><button class="btn primary" onclick="finishAddGroupMembers()">Add to group</button></div>`);renderGroupFriendPicker('addGroupMembersList','addGroupMemberSearch',newGroupSelected,excluded)}
 async function loadGroupMessages(gid){try{const ms=await api('/groups/'+gid+'/messages');const c=$('messages');c.innerHTML='';if(!ms.length){c.innerHTML='<div class="empty">No group messages yet. 👋</div>';return}ms.forEach(m=>c.appendChild(groupMessageBubble(m)));c.scrollTop=c.scrollHeight}catch(e){alert(e.message)}}
-function groupMessageBubble(m){const b=messageBubble(m);b.dataset.groupId=m.gid;return b}
+function groupMessageBubble(m){
+  if(m?.kind==='system'){
+    const b=document.createElement('div');
+    b.className='group-system-message';
+    b.dataset.messageId=m.id||'';
+    b.dataset.groupId=m.gid||'';
+    b.textContent=m.text||'Group updated';
+    return b;
+  }
+  const b=messageBubble(m);b.dataset.groupId=m.gid;return b
+}
 const _baseSendMessage=window.sendMessage;
 window.sendMessage=async function(){if(!activeGroup)return _baseSendMessage();const input=$('messageInput'),text=input.value.trim();if(!text)return;input.value='';try{const m=await api('/groups/'+activeGroup.gid+'/messages',{method:'POST',body:JSON.stringify({text})});appendGroupMessage(m)}catch(e){input.value=text;alert(e.message)}};
 function appendGroupMessage(m){const c=$('messages');const empty=c.querySelector('.empty');if(empty)empty.remove();if(c.querySelector(`[data-message-id="${CSS.escape(m.id)}"]`))return;c.appendChild(groupMessageBubble(m));c.scrollTop=c.scrollHeight}
@@ -4004,4 +4034,32 @@ window.createFeatureGroup=createGroupWizard;
 </script>
 <script>
 (function(){const baseLoad=window.loadUser;if(typeof baseLoad==='function'){window.loadUser=async function(){await baseLoad();await hydrateGroups();}};setTimeout(()=>{if(window.me)hydrateGroups();},250);})();
+</script>
+<script id="felix-persistent-push-upgrade">
+(function(){
+ function b64ToUint8Array(base64String){const padding='='.repeat((4-base64String.length%4)%4);const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
+ async function enablePersistentPush(){
+   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)) return alert('This browser does not support persistent push notifications.');
+   const permission=await Notification.requestPermission(); if(permission!=='granted')return alert('Notification permission was not granted.');
+   const reg=await navigator.serviceWorker.register('/service-worker.js'); await navigator.serviceWorker.ready;
+   const key=await api('/push/public-key'); if(!key.publicKey)return alert('Push notifications are not configured on the server yet. Add the VAPID keys in Render.');
+   let sub=await reg.pushManager.getSubscription(); if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToUint8Array(key.publicKey)});
+   await api('/push/subscribe',{method:'POST',body:JSON.stringify({subscription:sub.toJSON()})}); browserNotificationsEnabled=true;
+   alert('Persistent notifications are enabled on this device.');
+ }
+ window.enableBrowserNotifications=enablePersistentPush;
+ navigator.serviceWorker?.register('/service-worker.js').catch(()=>{});
+ // Give group messages their sender name instead of treating them as a one-to-one message.
+ const oldGroupBubble=window.groupMessageBubble;
+ window.groupMessageBubble=function(m){
+   if(m?.kind==='system')return oldGroupBubble(m);
+   const b=document.createElement('div');b.className='message '+(m.from===window.me?.uid?'mine':'theirs');b.dataset.messageId=m.id||'';b.dataset.groupId=m.gid||'';
+   const sender=m.senderDisplayName||m.senderUsername||'Unknown';
+   b.innerHTML='<div class="small" style="font-weight:800;margin-bottom:4px">'+escapeHtml(sender)+'</div><div class="message-text">'+escapeHtml(m.text||'')+'</div><div class="small">'+new Date(m.time||Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</div>';
+   return b;
+ };
+ // Keep group list hydrated from Turso after login/reconnect and page refresh.
+ const oldHydrate=window.hydrateGroups;
+ window.hydrateGroups=async function(){try{await oldHydrate?.();featureGroups=await api('/groups');renderFriends();}catch(e){console.warn(e)}};
+})();
 </script>
