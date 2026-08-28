@@ -1329,7 +1329,7 @@ button:focus-visible,input:focus-visible{
 /* Added calling + uploaded profile pictures */
 .avatar{overflow:hidden;position:relative}.avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .call-actions{display:flex;gap:6px;margin-left:auto}.call-btn{width:auto;min-width:42px;height:36px;padding:0 10px;border-radius:10px;background:#171d35;border:1px solid #354264;color:#fff;font-weight:800}.call-btn.video{background:linear-gradient(135deg,#8b5cf6,#ec4899);border-color:transparent}
-.call-overlay{position:fixed;inset:0;z-index:20000;background:rgba(5,7,16,.94);backdrop-filter:blur(18px);display:none;align-items:center;justify-content:center;padding:18px}.call-card{width:min(720px,100%);background:#11162a;border:1px solid #354264;border-radius:24px;padding:18px;box-shadow:0 25px 80px #000b;display:flex;flex-direction:column;gap:12px}.call-title{font-size:20px;font-weight:900}.call-sub{color:#9aa6c2;font-size:13px}.call-video-stage{position:relative;background:#05070d;border-radius:18px;overflow:hidden;min-height:260px;aspect-ratio:16/9}.call-video-stage video{width:100%;height:100%;object-fit:contain;background:#05070d}.call-video-stage #localVideo{position:absolute;right:12px;bottom:12px;width:26%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff4;border-radius:14px;display:none}.call-audio-icon{font-size:64px;text-align:center;padding:70px 0}.call-controls,.incoming-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.call-control{padding:11px 18px;border-radius:12px;background:#202946;color:#fff;border:1px solid #3a4769;font-weight:800}.call-control.end{background:#d83f5d;border-color:#d83f5d}.profile-upload{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed #3a4769;border-radius:12px;background:#0d1322}
+.call-overlay{position:fixed;inset:0;z-index:20000;background:rgba(5,7,16,.94);backdrop-filter:blur(18px);display:none;align-items:center;justify-content:center;padding:18px}.call-card{width:min(720px,100%);background:#11162a;border:1px solid #354264;border-radius:24px;padding:18px;box-shadow:0 25px 80px #000b;display:flex;flex-direction:column;gap:12px}.call-title{font-size:20px;font-weight:900}.call-sub{color:#9aa6c2;font-size:13px}.call-video-stage{position:relative;background:#05070d;border-radius:18px;overflow:hidden;min-height:260px;aspect-ratio:16/9}.call-video-stage video{width:100%;height:100%;object-fit:contain;background:#05070d}.group-call-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;width:100%;height:100%;padding:8px;box-sizing:border-box;overflow:auto}.group-call-tile{position:relative;min-height:150px;background:#0b1020;border:1px solid #2d3954;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center}.group-call-tile video{width:100%;height:100%;object-fit:cover}.group-call-label{position:absolute;left:8px;bottom:8px;background:#0009;color:#fff;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:800}.group-call-avatar{font-size:42px}.group-call-audio-tile{display:flex;align-items:center;justify-content:center}.call-video-stage #localVideo{position:absolute;right:12px;bottom:12px;width:26%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff4;border-radius:14px;display:none}.call-audio-icon{font-size:64px;text-align:center;padding:70px 0}.call-controls,.incoming-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.call-control{padding:11px 18px;border-radius:12px;background:#202946;color:#fff;border:1px solid #3a4769;font-weight:800}.call-control.end{background:#d83f5d;border-color:#d83f5d}.profile-upload{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed #3a4769;border-radius:12px;background:#0d1322}
 .call-filters-panel{display:none;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;padding:10px;border:1px solid #354264;border-radius:14px;background:#0d1322}.call-filters-panel button{padding:9px 6px;border-radius:10px;background:#1b2742;color:#fff;border:1px solid #354264;font-weight:700;cursor:pointer}.call-filters-panel button.active{background:#6d4aff;border-color:#8b7cff}.call-filter-note{grid-column:1/-1;color:#9aa6c2;font-size:11px;text-align:center}
 @media(max-width:700px){.call-filters-panel{grid-template-columns:repeat(2,minmax(0,1fr));max-height:32vh;overflow:auto}}
 
@@ -1606,6 +1606,7 @@ class="friends"
   <div class="snap-column snap-column-left">
     <button class="btn" onclick="showStories()">Stories</button>
     <button class="btn" onclick="createStory()">Add Story</button>
+    <button class="btn" onclick="createGroupWizard()">👥 Create Group</button>
     <button class="btn" onclick="searchUsers()">Find People</button>
     <button class="btn" onclick="editProfile()">Profile</button>
   </div>
@@ -1661,7 +1662,7 @@ Felix Chat
 </div>
 
 </div>
-<div id="devCommandActions" style="display:none;margin-left:6px"><button class="friend-menu-btn" onclick="openDevCommands()" title="Developer/Mod commands">⚡</button></div><div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCall('audio')" title="Call"><span>Call</span></button><button class="call-btn video" onclick="startCall('video')" title="FaceTime"><span>FaceTime</span></button></div><button class="friend-menu-btn" id="locationBtn" style="display:none" onclick="toggleLiveLocation()" title="Share live location">Location</button><div class="friend-actions"><button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button></div>
+<div id="devCommandActions" style="display:none;margin-left:6px"><button class="friend-menu-btn" onclick="openDevCommands()" title="Developer/Mod commands">⚡</button></div><div class="call-actions" id="callActions" style="display:none"><button class="call-btn" onclick="startCurrentCall('audio')" title="Call"><span>Call</span></button><button class="call-btn video" onclick="startCurrentCall('video')" title="FaceTime"><span>FaceTime</span></button></div><button class="friend-menu-btn" id="locationBtn" style="display:none" onclick="toggleLiveLocation()" title="Share live location">Location</button><div class="friend-actions"><button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button></div>
 </header>
 
 <section id="storyStrip" class="story-strip"></section>
@@ -3096,11 +3097,11 @@ function closeAnnouncement(){const el=$('announcementOverlay');if(el)el.remove()
 setInterval(()=>{if(me)syncAdminButton()},1500);
 </script>
 <div id="requestToastStack" class="request-toast-stack"></div>
-<div id="callOverlay" class="call-overlay"><div class="call-card"><div><div id="callTitle" class="call-title">Call</div><div id="callSub" class="call-sub">Connecting…</div></div><div class="call-video-stage"><div id="callAudioIcon" class="call-audio-icon">📞</div><video id="remoteVideo" autoplay playsinline style="display:none"></video><video id="localVideo" autoplay muted playsinline></video></div><div id="incomingActions" class="incoming-actions" style="display:none"><button class="call-control" onclick="acceptIncomingCall()">✅ Accept</button><button class="call-control end" onclick="rejectIncomingCall()">✕ Decline</button></div><div id="callControls" class="call-controls">
+<div id="callOverlay" class="call-overlay"><div class="call-card"><div><div id="callTitle" class="call-title">Call</div><div id="callSub" class="call-sub">Connecting…</div></div><div class="call-video-stage"><div id="callAudioIcon" class="call-audio-icon">📞</div><div id="groupCallGrid" class="group-call-grid" style="display:none"></div><video id="remoteVideo" autoplay playsinline style="display:none"></video><video id="localVideo" autoplay muted playsinline></video></div><div id="incomingActions" class="incoming-actions" style="display:none"><button class="call-control" onclick="acceptIncomingCall()">✅ Accept</button><button id="acceptGroupCallBtn" class="call-control" onclick="acceptIncomingGroupCall()" style="display:none">👥 Join</button><button class="call-control end" onclick="rejectIncomingCall()">✕ Decline</button></div><div id="callControls" class="call-controls">
 <button id="muteCallBtn" class="call-control" onclick="toggleCallMute()">Mute microphone</button>
 <button id="cameraCallBtn" class="call-control" onclick="toggleCallCamera()" style="display:none">Turn off camera</button>
 <button id="callFiltersBtn" class="call-control" onclick="toggleCallFilters()" style="display:none">Filters</button>
-<button class="call-control end" onclick="endCall()">End call</button>
+<button id="groupCallAddBtn" class="call-control" onclick="openGroupCallAddPeople()" style="display:none">＋ Add people</button><button class="call-control end" onclick="endCall()">End call</button>
 </div><div id="callFiltersPanel" class="call-filters-panel" style="display:none"></div>
 </div></div></div>
 
@@ -3108,6 +3109,7 @@ setInterval(()=>{if(me)syncAdminButton()},1500);
 /* REAL WEBRTC CALLING — uses the existing authenticated WebSocket for signaling. */
 let callPC=null,callStream=null,callRemoteStream=null,callMode='audio',callId=null,callPeer=null,callIncomingOffer=null,callState='idle',callPendingIce=[];
 let callMuted=false,callCameraOff=false;
+let groupCallId=null, groupCallActive=false, groupCallPeers=new Map(), groupCallStream=null, groupCallMode='audio', groupCallOwner=false;
 let callRawStream=null,callFilterCanvas=null,callFilterCtx=null,callFilterRAF=null,callFilterName='none',callFilterSource=null,callFilterStream=null;
 const CALL_FILTERS=[
   ['none','Normal'],['dino','Dinosaur'],['glasses','Glasses'],['moustache','Moustache'],['ears','Funny Ears'],['clown','Clown'],['robot','Robot'],['alien','Alien'],['pixel','Pixel'],['party','Party Face'],
@@ -3311,6 +3313,59 @@ function toggleCallCamera(){
 }
 
 
+function isGroupCallMessage(m){return !!(m&&m.groupCall&&m.gid);}
+function groupCallMembers(){return (activeGroup?.members||[]).filter(u=>u.uid!==me?.uid);}
+function groupCallTile(uid,stream,label,local=false){
+  const grid=$('groupCallGrid'); if(!grid)return;
+  let tile=grid.querySelector(`[data-group-peer="${CSS.escape(uid)}"]`);
+  if(!tile){tile=document.createElement('div');tile.className='group-call-tile';tile.dataset.groupPeer=uid;tile.innerHTML=`<div class="group-call-avatar">👤</div><div class="group-call-label"></div>`;grid.appendChild(tile)}
+  tile.querySelector('.group-call-label').textContent=label||uid;
+  if(stream){let v=tile.querySelector('video');if(!v){v=document.createElement('video');v.autoplay=true;v.playsInline=true;v.muted=!!local;tile.insertBefore(v,tile.firstChild)}v.srcObject=stream;tile.querySelector('.group-call-avatar').style.display='none';}
+}
+function removeGroupCallTile(uid){$('groupCallGrid')?.querySelector(`[data-group-peer="${CSS.escape(uid)}"]`)?.remove();}
+function resetGroupCall(){for(const [,p] of groupCallPeers){try{p.pc?.close()}catch{};p.stream?.getTracks().forEach(t=>t.stop())}groupCallPeers.clear();groupCallStream?.getTracks().forEach(t=>t.stop());groupCallStream=null;groupCallId=null;groupCallActive=false;groupCallOwner=false;groupCallMode='audio';if($('groupCallGrid')){$('groupCallGrid').innerHTML='';$('groupCallGrid').style.display='none';}}
+function sendGroupCallSignal(type,gid,payload,target){if(!socket||socket.readyState!==WebSocket.OPEN||!gid)return;socket.send(JSON.stringify({type,gid,groupCall:true,target:target||null,callType:groupCallMode,payload:payload||null}));}
+async function createGroupPeer(peerUid,initiator){
+  if(groupCallPeers.has(peerUid))return groupCallPeers.get(peerUid).pc;
+  const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+  const remote=new MediaStream();
+  groupCallPeers.set(peerUid,{pc,stream:remote,accepted:false});
+  if(groupCallStream)groupCallStream.getTracks().forEach(t=>pc.addTrack(t,groupCallStream));
+  pc.ontrack=e=>{e.streams[0]?.getTracks().forEach(t=>remote.addTrack(t));groupCallTile(peerUid,remote,groupCallPeers.get(peerUid)?.label||peerUid);};
+  pc.onicecandidate=e=>{if(e.candidate)sendGroupCallSignal('group_call_signal',activeGroup.gid,{kind:'ice',groupCallId,candidate:e.candidate},peerUid)};
+  pc.onconnectionstatechange=()=>{if(['failed','disconnected','closed'].includes(pc.connectionState)){removeGroupCallTile(peerUid);try{pc.close()}catch{};groupCallPeers.delete(peerUid);}};
+  if(initiator){const offer=await pc.createOffer();await pc.setLocalDescription(offer);sendGroupCallSignal('group_call_signal',activeGroup.gid,{kind:'offer',groupCallId,sdp:offer},peerUid)}
+  return pc;
+}
+async function startGroupCall(mode){
+  if(!activeGroup)return alert('Open a group chat first.');
+  if(groupCallActive||callState!=='idle')return alert('You are already in a call.');
+  if(!navigator.mediaDevices?.getUserMedia)return alert('Calling requires a secure HTTPS connection and a supported browser.');
+  groupCallMode=mode;groupCallId=Math.random().toString(36).slice(2);groupCallActive=true;groupCallOwner=true;callMode=mode;callState='connected';
+  try{groupCallStream=await navigator.mediaDevices.getUserMedia({audio:true,video:mode==='video'});showCallOverlay(mode==='video'?'📹 Group video call':'📞 Group voice call','Starting group call…');$('groupCallGrid').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';$('callAudioIcon').style.display=mode==='audio'?'flex':'none';
+    if(mode==='video')groupCallTile(me.uid,groupCallStream,'You',true); else groupCallTile(me.uid,null,'You');
+    for(const u of groupCallMembers())groupCallTile(u.uid,null,u.displayName||u.username);
+    sendGroupCallSignal('group_call_invite',activeGroup.gid,{groupCallId,caller:me.uid},null);$('callSub').textContent='Calling group…';
+  }catch(e){resetGroupCall();callState='idle';$('callOverlay').style.display='none';alert('Microphone/camera permission was denied or unavailable.')}
+}
+async function joinGroupCall(m){
+  if(!activeGroup||!m.payload?.groupCallId)return;
+  if(groupCallActive)return;
+  groupCallId=m.payload.groupCallId;groupCallMode=m.callType==='video'?'video':'audio';groupCallActive=true;groupCallOwner=false;callMode=groupCallMode;callState='connected';
+  try{groupCallStream=await navigator.mediaDevices.getUserMedia({audio:true,video:groupCallMode==='video'});showCallOverlay(groupCallMode==='video'?'📹 Group video call':'📞 Group voice call','Joining group call…');$('groupCallGrid').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';$('callAudioIcon').style.display=groupCallMode==='audio'?'flex':'none';if(groupCallMode==='video')groupCallTile(me.uid,groupCallStream,'You',true);else groupCallTile(me.uid,null,'You');sendGroupCallSignal('group_call_join',activeGroup.gid,{groupCallId},m.from);}
+  catch(e){resetGroupCall();callState='idle';alert('Microphone/camera permission was denied or unavailable.')}
+}
+async function leaveGroupCall(){if(!groupCallActive)return;sendGroupCallSignal('group_call_leave',activeGroup?.gid,{groupCallId},null);resetGroupCall();callState='idle';$('callOverlay').style.display='none';}
+async function handleGroupCallMessage(m){
+  if(!isGroupCallMessage(m)||!m.gid)return false;
+  if(!activeGroup||activeGroup.gid!==m.gid)return true;
+  if(m.type==='group_call_invite'){if(groupCallActive||callState!=='idle')return true;groupCallId=m.payload?.groupCallId;groupCallMode=m.callType==='video'?'video':'audio';groupCallActive=false;callState='incoming';callPeer=m.from;showCallOverlay(groupCallMode==='video'?'📹 Incoming group video call':'📞 Incoming group call','@'+(m.fromUsername||'A group member')+' started a call',true);return true;}
+  if(m.type==='group_call_join'&&m.payload?.groupCallId===groupCallId){const u=(activeGroup.members||[]).find(x=>x.uid===m.from);const p=await createGroupPeer(m.from,true);groupCallPeers.get(m.from).label=u?.displayName||u?.username||m.from;return true;}
+  if(m.type==='group_call_signal'&&m.payload?.groupCallId===groupCallId){const p=m.payload||{};let peer=groupCallPeers.get(m.from);if(!peer)await createGroupPeer(m.from,false);peer=groupCallPeers.get(m.from);if(p.kind==='offer'){await peer.pc.setRemoteDescription(new RTCSessionDescription(p.sdp));for(const c of (peer.ice||[])){try{await peer.pc.addIceCandidate(new RTCIceCandidate(c))}catch{}}const ans=await peer.pc.createAnswer();await peer.pc.setLocalDescription(ans);sendGroupCallSignal('group_call_signal',m.gid,{kind:'answer',groupCallId,sdp:ans},m.from);}else if(p.kind==='answer'){await peer.pc.setRemoteDescription(new RTCSessionDescription(p.sdp));}else if(p.kind==='ice'){if(peer.pc.remoteDescription)peer.pc.addIceCandidate(new RTCIceCandidate(p.candidate)).catch(()=>{});else{peer.ice=peer.ice||[];peer.ice.push(p.candidate)}}return true;}
+  if(m.type==='group_call_leave'&&m.payload?.groupCallId===groupCallId){removeGroupCallTile(m.from);const peer=groupCallPeers.get(m.from);try{peer?.pc.close()}catch{};groupCallPeers.delete(m.from);return true;}
+  if(m.type==='group_call_end'&&m.payload?.groupCallId===groupCallId){resetGroupCall();callState='idle';$('callOverlay').style.display='none';return true;}
+  return true;
+}
 function sendCallSignal(type,payload){
   if(!socket || socket.readyState!==WebSocket.OPEN || !callPeer)return;
   socket.send(JSON.stringify({type,to:callPeer,callType:callMode,payload:payload||null}));
@@ -3320,12 +3375,16 @@ function showCallOverlay(title,sub,incoming=false){
   $('callTitle').textContent=title;
   $('callSub').textContent=sub;
   $('incomingActions').style.display=incoming?'flex':'none';
+  if($('incomingActions')){const normal=$('incomingActions').querySelector('button[onclick="acceptIncomingCall()"]');if(normal)normal.style.display=(incoming&&!groupCallId)?'inline-block':'none';}
   $('callControls').style.display=incoming?'none':'flex';
+  const isGroup=groupCallActive||groupCallId; if($('groupCallGrid'))$('groupCallGrid').style.display=isGroup?'grid':'none';
   $('callAudioIcon').style.display=callMode==='audio'?'flex':'none';
   $('remoteVideo').style.display=callMode==='video'?'block':'none';
   $('localVideo').style.display=callMode==='video'?'block':'none';
   $('callFiltersBtn').style.display=callMode==='video'&&!incoming?'inline-block':'none';
   $('callFiltersPanel').style.display='none';
+  if($('groupCallAddBtn'))$('groupCallAddBtn').style.display=(groupCallActive&&groupCallOwner)?'inline-block':'none';
+  if($('acceptGroupCallBtn'))$('acceptGroupCallBtn').style.display=(incoming&&!!groupCallId)?'inline-block':'none';
   buildCallFilters();
 }
 async function startCall(mode){
@@ -3370,6 +3429,18 @@ async function createCallPeer(){
   if(callStream)callStream.getTracks().forEach(t=>callPC.addTrack(t,callStream));
   return callPC;
 }
+async function acceptIncomingGroupCall(){
+  if(callState!=='incoming'||!callPeer)return;
+  const fake={from:callPeer,payload:{groupCallId},callType:groupCallMode};
+  await joinGroupCall(fake);$('incomingActions').style.display='none';$('callControls').style.display='flex';
+}
+async function openGroupCallAddPeople(){
+  if(!activeGroup||!groupCallActive)return;
+  const others=groupCallMembers().filter(u=>!groupCallPeers.has(u.uid));
+  if(!others.length)return alert('Everyone in this group is already in the call.');
+  openModal(`<h2>👥 Add people</h2><p class="small">Choose people to invite to this call.</p><div class="feature-list">${others.map(u=>`<label class="search-user-row"><input type="checkbox" data-call-invite="${u.uid}"><div class="avatar">${avatarMarkup(u)}</div><b>${userLabel(u)}</b></label>`).join('')}</div><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="inviteSelectedGroupCallPeople()">Invite</button></div>`);
+}
+function inviteSelectedGroupCallPeople(){const ids=[...document.querySelectorAll('[data-call-invite]:checked')].map(x=>x.dataset.callInvite);ids.forEach(uid=>{sendGroupCallSignal('group_call_invite',activeGroup.gid,{groupCallId,caller:me.uid},uid)});closeModal();}
 async function acceptIncomingCall(){
   if(!callIncomingOffer)return;
   try{
@@ -3395,6 +3466,7 @@ function rejectIncomingCall(){
   cleanupCall();
 }
 async function endCall(){
+  if(groupCallActive){await leaveGroupCall();return;}
   if(callState!=='idle')sendCallSignal('call_end',{});
   cleanupCall();
 }
@@ -3416,6 +3488,7 @@ function cleanupCall(){
   if($('callOverlay'))$('callOverlay').style.display='none';
 }
 function handleCallMessage(m){
+  if(m?.type?.startsWith('group_call_')){handleGroupCallMessage(m);return;}
   if(m?.type==='announcement'){showAnnouncement(m.announcement||{});return;}
   if(!m||!m.from)return;
   if(m.type==='call_invite'){
@@ -3507,9 +3580,17 @@ function userLabel(user){return `@${escapeHtml(user?.username||'user')}${roleBad
 function showFeatureHub(){openModal(`<h2>✨ Felix Chat Features</h2><div class="feature-grid"><button class="btn" onclick="openGroupsPanel()">👥 Group Chats</button><button class="btn" onclick="openUserSearchPanel()">🔎 User Search</button><button class="btn" onclick="editProfile()">🎨 Custom Profile</button><button class="btn" onclick="openSecurityPanel()">🔐 Account Security</button><button class="btn" onclick="openDeviceLayoutSettings()">Layout</button><button class="btn" onclick="openPinnedPanel()">📌 Pinned Messages</button><button class="btn" onclick="enableBrowserNotifications()">🔔 Notifications</button><button class="btn" onclick="showRequests()">👥 Friend Requests</button></div><p class="security-note" style="margin-top:14px">New features are additive and use your existing Turso + Cloudinary setup.</p><button class="btn" onclick="closeModal()">Close</button>`)}
 function openUserSearchPanel(){openModal(`<h2>🔎 Find People</h2><div class="feature-search"><input id="featureSearchInput" class="input" placeholder="Username or name"><button class="btn primary" onclick="runFeatureSearch()">Search</button></div><div id="featureSearchResults" class="feature-list" style="margin-top:10px"></div><button class="btn" onclick="closeModal()">Done</button>`)}
 async function runFeatureSearch(){const q=($('featureSearchInput')?.value||'').trim();if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));$('featureSearchResults').innerHTML=users.length?users.map(u=>`<div class="search-user-row"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1"><b>${userLabel(u)}</b><div class="small">${escapeHtml(u.displayName||u.username)}${u.online?' · Online':''}</div></div><button class="btn primary" onclick="sendFoundFriend('${escapeHtml(u.username)}')">Add</button></div>`).join(''):'<div class="small">No users found.</div>'}catch(e){alert(e.message)}}
+function startCurrentCall(mode){if(activeGroup)return startGroupCall(mode);return startCall(mode);}
+function updateCallActionsForContext(){
+  const el=$('callActions'); if(!el)return;
+  if(activeGroup){el.style.display='flex';el.innerHTML='<button class="call-btn" onclick="startCurrentCall(\'audio\')" title="Group call">Call</button><button class="call-btn video" onclick="startCurrentCall(\'video\')" title="Group video call">FaceTime</button>';}
+  else if(activeFriend){el.style.display='flex';el.innerHTML='<button class="call-btn" onclick="startCurrentCall(\'audio\')" title="Call">Call</button><button class="call-btn video" onclick="startCurrentCall(\'video\')" title="FaceTime">FaceTime</button>';}
+  else el.style.display='none';
+}
+
 async function openGroupsPanel(){try{featureGroups=await api('/groups');openModal(`<h2>👥 Group Chats</h2><button class="btn primary" onclick="createFeatureGroup()">＋ Create Group</button><div class="feature-list" style="margin-top:10px">${featureGroups.length?featureGroups.map(g=>`<div class="group-row" onclick="selectGroup('${g.gid}')"><div class="avatar">${initials(g.name)}</div><div style="flex:1"><b>${escapeHtml(g.name)}</b><div class="small">${g.members?.length||1} members</div></div>›</div>`).join(''):'<div class="small" style="margin-top:12px">No groups yet.</div>'}</div><button class="btn" onclick="closeModal()">Done</button>`)}catch(e){alert(e.message)}}
 async function createFeatureGroup(){const name=prompt('Group name:','New Group');if(!name)return;try{await api('/groups',{method:'POST',body:JSON.stringify({name})});await openGroupsPanel()}catch(e){alert(e.message)}}
-async function selectGroup(gid){const g=featureGroups.find(x=>x.gid===gid)|| (await api('/groups')).find(x=>x.gid===gid);if(!g)return;activeGroup=g;activeFriend=null;closeModal();$('friendName').innerHTML=escapeHtml(g.name);$('friendStatus').textContent=`👥 ${g.members?.length||1} members`;$('featureTypingIndicator').textContent='';if($('friendAvatar'))$('friendAvatar').innerHTML=initials(g.name);$('callActions').style.display='none';$('messageInput').disabled=false;const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openGroupManage()" title="Group options">⋮</button>';await loadGroupMessages(gid)}
+async function selectGroup(gid){const g=featureGroups.find(x=>x.gid===gid)|| (await api('/groups')).find(x=>x.gid===gid);if(!g)return;activeGroup=g;activeFriend=null;closeModal();$('friendName').innerHTML=escapeHtml(g.name);$('friendStatus').textContent=`👥 ${g.members?.length||1} members`;$('featureTypingIndicator').textContent='';if($('friendAvatar'))$('friendAvatar').innerHTML=initials(g.name);$('callActions').style.display='flex';$('messageInput').disabled=false;const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openGroupManage()" title="Group options">⋮</button>';await loadGroupMessages(gid)}
 async function openGroupManage(){if(!activeGroup)return;const g=activeGroup;const canRemove=g.owner_id===me?.uid;openModal(`<h2>⚙️ ${escapeHtml(g.name)}</h2><p class="small">${g.members?.length||1} members</p><div class="feature-list">${(g.members||[]).map(u=>`<div class="search-user-row"><div class="avatar">${avatarMarkup(u)}</div><div style="flex:1"><b>${userLabel(u)}</b><div class="small">${u.uid===g.owner_id?'Owner':''}</div></div>${canRemove&&u.uid!==me.uid?`<button class="btn" onclick="removeGroupMember('${g.gid}','${u.uid}')">Remove</button>`:''}</div>`).join('')}</div>${g.owner_id===me?.uid?'<button class="btn primary" onclick="addGroupMemberWizard()">＋ Add Members</button>':''}<button class="btn" onclick="openGroupsPanel()">Back</button>`)}
 async function removeGroupMember(gid,uid){try{await api('/groups/'+gid+'/members/remove',{method:'POST',body:JSON.stringify({uid})});featureGroups=await api('/groups');activeGroup=featureGroups.find(x=>x.gid===gid)||activeGroup;openGroupManage()}catch(e){alert(e.message)}}
 async function addGroupMemberWizard(){const q=prompt('Enter username to add:','');if(!q)return;try{const users=await api('/users/search?q='+encodeURIComponent(q));const u=users[0];if(!u)return alert('User not found.');await api('/groups/'+activeGroup.gid+'/members',{method:'POST',body:JSON.stringify({uid:u.uid})});featureGroups=await api('/groups');activeGroup=featureGroups.find(x=>x.gid===activeGroup.gid);openGroupManage()}catch(e){alert(e.message)}}
@@ -3569,7 +3650,7 @@ document.addEventListener('click',()=>{const m=document.getElementById('modal');
 const _baseRenderFriends=window.renderFriends;
 window.renderFriends=function(){_baseRenderFriends();document.querySelectorAll('#friends .friend').forEach((el,i)=>{const f=me?.friends?.[i];if(!f)return;const b=el.querySelector('.friend-info b');if(b)b.innerHTML=userLabel(f);const st=el.querySelector('.small');if(st&&f.statusText)st.textContent=(f.online?'● Online':'● Offline');});};
 const _baseSelectFriend2=window.selectFriend;
-window.selectFriend=async function(friend){await _baseSelectFriend2(friend);const b=$('friendName');if(b)b.innerHTML=userLabel(friend);if($('featureTypingIndicator'))$('featureTypingIndicator').textContent='';const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button>';};
+window.selectFriend=async function(friend){await _baseSelectFriend2(friend);updateCallActionsForContext();const b=$('friendName');if(b)b.innerHTML=userLabel(friend);if($('featureTypingIndicator'))$('featureTypingIndicator').textContent='';const fa=document.querySelector('.friend-actions');if(fa)fa.innerHTML='<button class="friend-menu-btn" onclick="openFriendOptions()" title="Friend options">⋮</button>';};
 function openPinnedPanel(){if(!activeFriend)return alert('Choose a friend first.');api('/messages/'+activeFriend.uid+'/pinned').then(rows=>openModal(`<h2>📌 Pinned Messages</h2>${rows.length?rows.map(m=>`<div class="feature-card" style="margin:8px 0"><b>${escapeHtml(m.text||m.kind||'Media')}</b><div class="small">${new Date(m.time).toLocaleString()}</div></div>`).join(''):'<p>No pinned messages.</p>'}<button class="btn" onclick="closeModal()">Done</button>`)).catch(e=>alert(e.message))}
 async function pinFeatureMessage(id){if(!activeFriend)return;try{await api('/messages/'+activeFriend.uid+'/'+id+'/pin',{method:'POST'});alert('Message pinned.')}catch(e){alert(e.message)}}
 const _oldMessageBubble2=window.messageBubble;
@@ -3767,8 +3848,10 @@ window.createFeatureGroup=createGroupWizard;
       const st=stories[0];
       const d=document.createElement('div');
       d.className='story-card';
+      d.setAttribute('role','button'); d.setAttribute('tabindex','0');
       d.innerHTML='<div class="story-ring '+(unseen?'story-unseen':'story-seen')+'"><img src="'+escapeHtml(st.avatar||'')+'" onerror="this.style.display=\'none\'"></div><div class="small">'+escapeHtml(st.displayName||st.username)+(stories.length>1?' · '+stories.length:'')+'</div>';
-      d.onclick=function(){viewStory(st);};
+      d.onclick=function(e){e.preventDefault();e.stopPropagation();viewStory(st);};
+      d.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();viewStory(st);}};
       strip.appendChild(d);
     });
   };
