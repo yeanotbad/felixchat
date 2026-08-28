@@ -669,7 +669,7 @@ wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JS
 
 setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM polls WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
-init().then(()=>
+init().then(()=>{
 // Collectibles, staff-issued tags, polls, themes and chat mini-games.
 app.get('/api/collectibles/me', auth, async (req,res)=>{
   const rows=await db.execute({sql:`SELECT c.* FROM user_collectibles uc JOIN collectibles c ON c.id=uc.collectible_id WHERE uc.uid=? ORDER BY uc.created_at DESC`,args:[req.uid]});
@@ -703,4 +703,5 @@ app.post('/api/polls/:id/vote', auth, async(req,res)=>{
   await db.execute({sql:'INSERT OR REPLACE INTO poll_votes(poll_id,uid,option_index,voted_at) VALUES(?,?,?,?)',args:[req.params.id,req.uid,Number(req.body.option),now()]});res.json({ok:true});
 });
 app.get('/api/games',auth,async(req,res)=>res.json({games:['Tic Tac Toe','Rock Paper Scissors','Connect 4','Trivia']}));
-server.listen(PORT,()=>console.log('Felix Chat running on '+PORT))).catch(e=>{console.error('DB init failed',e);process.exit(1);});
+server.listen(PORT,()=>console.log('Felix Chat running on '+PORT));
+}).catch(e=>{console.error('DB init failed',e);process.exit(1);});
