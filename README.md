@@ -63,3 +63,14 @@ Set these Render environment variables so profile pictures, stories, chat media,
 - `CLOUDINARY_UPLOAD_PRESET` — an **Unsigned** Cloudinary upload preset (for example `felixchat`)
 
 The browser uploads media directly to Cloudinary. Turso stores the returned permanent Cloudinary URL. Never put your Cloudinary API secret in the frontend.
+
+
+## Render deployment
+
+A `render.yaml` Blueprint is included. It keeps Turso as the persistent database and Cloudinary as persistent media storage. Add the four environment variables shown in the Blueprint in Render, then deploy the repository.
+
+The frontend uploads images/videos directly to Cloudinary using the unsigned upload preset; only the returned Cloudinary URL is stored in Turso. Do not expose a Cloudinary API secret in the browser.
+
+## Story behaviour
+
+Stories are stored independently, so adding another story never replaces an existing active story. Active stories expire after 24 hours. Each friend's story ring is blue when at least one active story is unseen and grey once all active stories have been viewed. Tapping a story image advances through that person's active stories and closes the viewer after the final story.
