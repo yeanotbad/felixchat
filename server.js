@@ -82,7 +82,9 @@ async function init() {
     `ALTER TABLE users ADD COLUMN banned_at INTEGER`,
     `ALTER TABLE users ADD COLUMN banned_by TEXT`,
     `ALTER TABLE users ADD COLUMN status_text TEXT DEFAULT ''`,
-    `ALTER TABLE users ADD COLUMN banner TEXT DEFAULT ''`
+    `ALTER TABLE users ADD COLUMN banner TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN timeout_until INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN timeout_by TEXT DEFAULT ''`
   ]) { try { await db.execute(sql); } catch (e) {} }
   // The @felixchat account is the sole owner of the admin powers.
   // This does not change any other account's role.
@@ -130,7 +132,7 @@ function broadcast(uid, payload) {
 }
 function pair(a,b,payload){ broadcast(a,payload); broadcast(b,payload); }
 function publicUser(u, online=false){
-  return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', verified:Number(u.verified||0)===1, online, lastSeen:u.last_seen || 0, streak:u.streak || 0 };
+  return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', verified:Number(u.verified||0)===1, online, lastSeen:u.last_seen || 0, streak:u.streak || 0, timeoutUntil:Number(u.timeout_until||0), timeoutBy:u.timeout_by || '' };
 }
 
 app.get('/api/health', async (_req,res)=>res.json({ok:true, database:process.env.TURSO_DATABASE_URL?'turso':'local'}));
@@ -178,7 +180,7 @@ app.get('/api/me',auth,async(req,res)=>{
   const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
   const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
-  res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,friends,requests:incoming.rows.map(x=>publicUser(x))});
+  res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',friends,requests:incoming.rows.map(x=>publicUser(x))});
 });
 
 const upload=multer({storage:multer.diskStorage({destination:(_r,_f,cb)=>cb(null,UPLOADS),filename:(_r,file,cb)=>cb(null,id()+path.extname(file.originalname||'').toLowerCase().slice(0,10))}),limits:{fileSize:50*1024*1024}});
@@ -339,7 +341,7 @@ app.post('/api/polls/:id/vote',auth,async(req,res)=>{
 
 app.get('/api/messages/:uid',auth,async(req,res)=>{if(!await areFriends(req.uid,req.params.uid))return res.status(403).json({error:'Not friends'});const r=await db.execute({sql:`SELECT * FROM messages WHERE chat_key=? AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at`,args:[chatKey(req.uid,req.params.uid),now()]});const out=[];for(const row of r.rows){const m=messageRow(row);const rr=await db.execute({sql:'SELECT uid,emoji FROM reactions WHERE message_id=? ORDER BY created_at',args:[m.id]});m.reactions=rr.rows;out.push(m)}res.json(out);});
 app.post('/api/messages/:uid',auth,async(req,res)=>{
-  const other=req.params.uid;if(!await areFriends(req.uid,other))return res.status(403).json({error:'Not friends'});if(await blocked(req.uid,other)||await blocked(other,req.uid))return res.status(403).json({error:'Messaging unavailable'});
+  const sender=await getUser(req.uid);if(Number(sender?.timeout_until||0)>now())return res.status(403).json({error:'You are currently timed out.'}); const other=req.params.uid;if(!await areFriends(req.uid,other))return res.status(403).json({error:'Not friends'});if(await blocked(req.uid,other)||await blocked(other,req.uid))return res.status(403).json({error:'Messaging unavailable'});
   const text=String(req.body.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'Empty message'});
   const m={id:id(),from:req.uid,to:other,text,kind:'text',url:'',name:'',mime:'',time:now(),readAt:null,expiresAt:req.body.disappearing?now()+86400000:null,replyTo:req.body.replyTo||null,edited:false};
   await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,created_at,expires_at,reply_to) VALUES(?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,m.text,'text',m.time,m.expiresAt,m.replyTo]});
@@ -406,8 +408,8 @@ app.get('/api/admin/status',auth,async(req,res)=>{
 app.get('/api/admin/users',auth,async(req,res)=>{
   if(!await requireModerator(req,res))return;
   const q=clean(req.query.q||'').toLowerCase();
-  const r=await db.execute({sql:`SELECT uid,username,display_name,bio,avatar,role,verified,banned,created_at,last_seen FROM users WHERE username LIKE ? OR display_name LIKE ? ORDER BY username LIMIT 100`,args:[`%${q}%`,`%${q}%`]});
-  res.json(r.rows.map(u=>({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',verified:Number(u.verified||0)===1,banned:Number(u.banned||0)===1,createdAt:u.created_at,lastSeen:u.last_seen})));
+  const r=await db.execute({sql:`SELECT uid,username,display_name,bio,avatar,role,verified,banned,timeout_until,timeout_by,created_at,last_seen FROM users WHERE username LIKE ? OR display_name LIKE ? ORDER BY username LIMIT 100`,args:[`%${q}%`,`%${q}%`]});
+  res.json(r.rows.map(u=>({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',verified:Number(u.verified||0)===1,banned:Number(u.banned||0)===1,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',createdAt:u.created_at,lastSeen:u.last_seen})));
 });
 app.post('/api/admin/ban/:uid',auth,async(req,res)=>{
   if(!await requireModerator(req,res))return;
@@ -448,6 +450,28 @@ app.post('/api/admin/verified/:uid',auth,async(req,res)=>{
   broadcast(req.params.uid,{type:'verified_changed',verified,oldVerified});
   res.json({ok:true,verified,oldVerified});
 });
+app.post('/api/admin/timeout/:uid',auth,async(req,res)=>{
+  if(!await requireModerator(req,res))return;
+  const target=await getUser(req.params.uid); const actor=await getUser(req.uid);
+  if(!target)return res.status(404).json({error:'User not found'});
+  if(target.username==='felixchat')return res.status(400).json({error:'You cannot timeout the FelixChat admin account.'});
+  const days=Math.max(0,Math.floor(Number(req.body.days)||0));
+  const hours=Math.max(0,Math.floor(Number(req.body.hours)||0));
+  const minutes=Math.max(0,Math.floor(Number(req.body.minutes)||0));
+  const duration=(days*86400+hours*3600+minutes*60)*1000;
+  if(duration<=0)return res.status(400).json({error:'Choose a timeout duration.'});
+  const until=now()+duration; const by=actor?.username||'Moderator';
+  await db.execute({sql:'UPDATE users SET timeout_until=?,timeout_by=? WHERE uid=?',args:[until,by,target.uid]});
+  broadcast(target.uid,{type:'timeout',until,by,role:String(actor?.role||'mod').toLowerCase()});
+  res.json({ok:true,until,by});
+});
+app.post('/api/admin/untimeout/:uid',auth,async(req,res)=>{
+  if(!await requireModerator(req,res))return;
+  const target=await getUser(req.params.uid); if(!target)return res.status(404).json({error:'User not found'});
+  if(target.username==='felixchat')return res.status(400).json({error:'You cannot change the FelixChat admin account.'});
+  await db.execute({sql:"UPDATE users SET timeout_until=0,timeout_by='' WHERE uid=?",args:[target.uid]});
+  broadcast(target.uid,{type:'timeout_ended'}); res.json({ok:true});
+});
 app.post('/api/admin/command',auth,async(req,res)=>{
   const isMod=await getRole(req.uid);
   if(!['admin','mod'].includes(isMod))return res.status(403).json({error:'Moderator access required'});
@@ -472,7 +496,7 @@ app.post('/api/admin/command',auth,async(req,res)=>{
 async function groupMember(gid,uid){const r=await db.execute({sql:'SELECT 1 FROM group_members WHERE gid=? AND uid=?',args:[gid,uid]});return r.rows.length>0;}
 async function broadcastGroup(gid,payload){const r=await db.execute({sql:'SELECT uid FROM group_members WHERE gid=?',args:[gid]});for(const x of r.rows)broadcast(x.uid,payload);}
 app.get('/api/groups/:gid/messages',auth,async(req,res)=>{if(!await groupMember(req.params.gid,req.uid))return res.status(403).json({error:'Not a group member'});const r=await db.execute({sql:'SELECT m.*,u.username,u.display_name,u.avatar FROM group_messages m JOIN users u ON u.uid=m.sender_id WHERE m.gid=? ORDER BY m.created_at LIMIT 1000',args:[req.params.gid]});res.json(r.rows.map(x=>({id:x.id,gid:x.gid,from:x.sender_id,text:x.text||'',kind:x.kind||'text',url:x.url||'',name:x.name||'',mime:x.mime||'',time:x.created_at,edited:!!x.edited,senderUsername:x.username,senderDisplayName:x.display_name||x.username,avatar:x.avatar||''})));});
-app.post('/api/groups/:gid/messages',auth,async(req,res)=>{const gid=req.params.gid;if(!await groupMember(gid,req.uid))return res.status(403).json({error:'Not a group member'});const text=String(req.body.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'Empty message'});const m={id:id(),gid,from:req.uid,text,kind:'text',url:'',name:'',mime:'',time:now(),edited:false};await db.execute({sql:'INSERT INTO group_messages(id,gid,sender_id,text,kind,created_at) VALUES(?,?,?,?,?,?)',args:[m.id,gid,req.uid,text,'text',m.time]});await broadcastGroup(gid,{type:'group_message',message:m});res.json(m);});
+app.post('/api/groups/:gid/messages',auth,async(req,res)=>{const timed=await getUser(req.uid);if(Number(timed?.timeout_until||0)>now())return res.status(403).json({error:'You are currently timed out.'});const gid=req.params.gid;if(!await groupMember(gid,req.uid))return res.status(403).json({error:'Not a group member'});const text=String(req.body.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'Empty message'});const m={id:id(),gid,from:req.uid,text,kind:'text',url:'',name:'',mime:'',time:now(),edited:false};await db.execute({sql:'INSERT INTO group_messages(id,gid,sender_id,text,kind,created_at) VALUES(?,?,?,?,?,?)',args:[m.id,gid,req.uid,text,'text',m.time]});await broadcastGroup(gid,{type:'group_message',message:m});res.json(m);});
 app.post('/api/groups/:gid/members/remove',auth,async(req,res)=>{const gid=req.params.gid,other=req.body.uid;const g=await db.execute({sql:'SELECT owner_id FROM groups WHERE gid=?',args:[gid]});if(!g.rows[0]||g.rows[0].owner_id!==req.uid)return res.status(403).json({error:'Only the group owner can remove members'});await db.execute({sql:'DELETE FROM group_members WHERE gid=? AND uid=?',args:[gid,other]});res.json({ok:true});});
 
 // Announcements: owners and moderators can send a full-screen announcement
