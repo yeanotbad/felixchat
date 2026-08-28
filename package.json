@@ -10,6 +10,7 @@
     "express": "^5.1.0",
     "ws": "^8.18.0",
     "multer": "^2.0.2",
-    "cloudinary": "^2.7.0"
+    "cloudinary": "^2.7.0",
+    "web-push": "^3.6.7"
   }
 }
