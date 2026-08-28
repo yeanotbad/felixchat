@@ -1303,6 +1303,7 @@ button:focus-visible,input:focus-visible{
 
 
 
+.timeout-overlay{position:fixed;inset:0;z-index:999999;background:rgba(6,10,18,.98);display:flex;align-items:center;justify-content:center;text-align:center;color:#fff}.timeout-card{width:min(520px,90vw);padding:36px 24px;border:1px solid #2f3c5b;border-radius:20px;background:#111827;box-shadow:0 25px 80px #0008}.timeout-card h1{margin:0 0 12px;font-size:clamp(28px,7vw,46px)}.timeout-card p{color:#aab5c9;line-height:1.5}.timeout-timer{font-size:clamp(30px,8vw,58px);font-weight:900;margin:18px 0}.timeout-by{font-size:13px;color:#7f8ca7}
 /* Developer / role badges - visual only */
 .role-badge{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:10px;font-weight:900;vertical-align:middle;letter-spacing:.4px}
 .dev-badge{color:#fff;text-shadow:0 0 8px #ff4fd8,0 0 12px #45e8ff;animation:devRainbow 2s linear infinite}
@@ -1767,12 +1768,24 @@ function setAvatar(el,user){if(el)el.innerHTML=avatarMarkup(user)}
 
 /* LOAD USER */
 
+let timeoutTimer=null;
+function showTimeout(until,by){
+  const existing=document.querySelector('.timeout-overlay'); if(existing) existing.remove();
+  const wrap=document.createElement('div'); wrap.className='timeout-overlay';
+  wrap.innerHTML=`<div class="timeout-card"><h1>You’ve been timed out</h1><p>You cannot send messages or use chat features until your timeout ends.</p><div class="timeout-timer" id="timeoutTimer"></div><div class="timeout-by">Timed out by ${escapeHtml(by||'a moderator')}</div></div>`;
+  document.body.appendChild(wrap);
+  const tick=()=>{const left=Math.max(0,Number(until||0)-Date.now()); const sec=Math.ceil(left/1000); const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60),ss=sec%60; const el=$('timeoutTimer'); if(el)el.textContent=`${d}d ${h}h ${m}m ${String(ss).padStart(2,'0')}s`; if(sec<=0){clearInterval(timeoutTimer);timeoutTimer=null;wrap.remove();loadUser().catch(()=>{});}};
+  clearInterval(timeoutTimer); tick(); timeoutTimer=setInterval(tick,1000);
+}
+function clearTimeoutOverlay(){clearInterval(timeoutTimer);timeoutTimer=null;document.querySelector('.timeout-overlay')?.remove();}
+
 async function loadUser(){
 
 try{
 
 me =
 await api("/me");
+if(Number(me.timeoutUntil||0)>Date.now()) showTimeout(me.timeoutUntil,me.timeoutBy); else clearTimeoutOverlay();
 
 $("myName").textContent =
 "@" + me.username;
@@ -2490,6 +2503,8 @@ const message =
 JSON.parse(event.data);
 
 if(message.type === "system_status"){ showSystemStatus(message.status||""); return; }
+if(message.type==='timeout'){ showTimeout(message.until,message.by); }
+if(message.type==='timeout_ended'){ clearTimeoutOverlay(); loadUser(); }
 if(message.type === "dev_effect"){
   applyDevEffect(message.effect);
 }
@@ -2720,7 +2735,8 @@ async function refreshAdminUsers(){
       const banButton=u.username==='felixchat'?'':(u.banned?`<button class="btn primary" onclick="adminUnban('${u.uid}')">Unban</button>`:`<button class="btn" onclick="adminBan('${u.uid}','${escapeHtml(u.username)}')">Ban</button>`);
       const roleButton=canGrant && u.username!=='felixchat'?`<select class="input" style="width:auto;padding:7px" onchange="adminSetRole('${u.uid}',this.value)"><option value="member" ${role==='member'?'selected':''}>Member</option><option value="vip" ${role==='vip'?'selected':''}>VIP</option><option value="mod" ${role==='mod'?'selected':''}>Moderator</option></select>`:'';
       const verifiedButton=canGrant && u.username!=='felixchat'?`<button class="btn ${u.verified?'primary':''}" onclick="adminSetVerified('${u.uid}',${!u.verified})">${u.verified?'✓ Verified':'☑ Verify'}</button>`:'';
-      return `<div class="request"><div class="avatar">${avatarMarkup(u)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)} <span class="role-badge">${roleLabel}</span></div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${roleButton}${verifiedButton}${banButton}</div>`;
+      const timeoutButton=u.username==='felixchat'?'':(Number(u.timeoutUntil||0)>Date.now()?`<button class="btn primary" onclick="adminUnTimeout('${u.uid}')">Remove Timeout</button>`:`<button class="btn" onclick="openTimeoutDialog('${u.uid}','${escapeHtml(u.username)}')">Timeout</button>`);
+      return `<div class="request"><div class="avatar">${avatarMarkup(u)}</div><b style="flex:1">@${escapeHtml(u.username)}<div class="small">${escapeHtml(u.displayName||u.username)} <span class="role-badge">${roleLabel}</span></div></b><span class="small">${u.banned?'🚫 Banned':'Active'}</span>${roleButton}${verifiedButton}${timeoutButton}${banButton}</div>`;
     }).join('');
   }catch(e){box.innerHTML='<p class="small">'+escapeHtml(e.message)+'</p>';}
 }
@@ -2729,6 +2745,12 @@ async function adminSetRole(uid,role){
   if(!confirm('Change this account to '+role+'?')){await refreshAdminUsers();return}
   try{await api('/admin/role/'+uid,{method:'POST',body:JSON.stringify({role})});await refreshAdminUsers();await loadUser()}catch(e){alert(e.message);await refreshAdminUsers()}
 }
+function openTimeoutDialog(uid,username){
+  openModal(`<h2>Timeout @${escapeHtml(username)}</h2><p class="small">Choose how long this user is timed out.</p><div class="row"><input id="timeoutDays" class="input" type="number" min="0" value="0" placeholder="Days"><input id="timeoutHours" class="input" type="number" min="0" value="0" placeholder="Hours"><input id="timeoutMinutes" class="input" type="number" min="0" value="30" placeholder="Minutes"></div><div class="row" style="margin-top:12px"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="adminTimeout('${uid}')">Timeout User</button></div>`);
+}
+async function adminTimeout(uid){try{await api('/admin/timeout/'+uid,{method:'POST',body:JSON.stringify({days:Number($('timeoutDays')?.value)||0,hours:Number($('timeoutHours')?.value)||0,minutes:Number($('timeoutMinutes')?.value)||0})});closeModal();await refreshAdminUsers();}catch(e){alert(e.message)}}
+async function adminUnTimeout(uid){try{await api('/admin/untimeout/'+uid,{method:'POST'});await refreshAdminUsers();}catch(e){alert(e.message)}}
+
 async function adminBan(uid,username){
   if(!confirm('Ban @'+username+'? They will be logged out immediately.'))return;
   try{await api('/admin/ban/'+uid,{method:'POST'});await refreshAdminUsers()}catch(e){alert(e.message)}
