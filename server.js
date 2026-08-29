@@ -730,12 +730,14 @@ app.post('/api/polls/:id/vote', auth, async(req,res)=>{
 });
 
 // Trading: friends can offer tradable collectibles, including tags. Official verification is never an inventory item.
-app.get('/api/trades/inventory/:uid?',auth,async(req,res)=>{
-  const uid=req.params.uid||req.uid;
+const getTradeInventory = async (req,res)=>{
+  const uid=(req.params.uid||req.uid);
   if(uid!==req.uid && !await areFriends(req.uid,uid)) return res.status(403).json({error:'Trade only with friends'});
   const r=await db.execute({sql:`SELECT c.* FROM user_collectibles uc JOIN collectibles c ON c.id=uc.collectible_id WHERE uc.uid=? ORDER BY uc.created_at DESC`,args:[uid]});
   res.json({items:r.rows.filter(x=>x.id!=='verified')});
-});
+};
+app.get('/api/trades/inventory',auth,getTradeInventory);
+app.get('/api/trades/inventory/:uid',auth,getTradeInventory);
 app.get('/api/trades',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM trade_offers WHERE from_uid=? OR to_uid=? ORDER BY created_at DESC LIMIT 100',args:[req.uid,req.uid]});res.json({trades:r.rows});});
 app.post('/api/trades',auth,async(req,res)=>{
  const to=String(req.body.toUid||''); if(!to||to===req.uid)return res.status(400).json({error:'Choose a friend'}); if(!await areFriends(req.uid,to))return res.status(403).json({error:'You can only trade with friends'});
