@@ -248,6 +248,12 @@ app.post('/api/profile/avatar',auth,async(req,res)=>{
   }catch(e){console.error(e);res.status(500).json({error:'Profile picture upload failed'});}
 });
 
+app.get('/api/friends',auth,async(req,res)=>{
+  const r=await db.execute({sql:`SELECT u.* FROM friendships f JOIN users u ON u.uid=f.friend_id WHERE f.user_id=? AND f.status='accepted' ORDER BY lower(u.username)`,args:[req.uid]});
+  const out=r.rows.map(u=>publicUser(u,(sockets.get(u.uid)?.size||0)>0));
+  res.json(out);
+});
+
 app.post('/api/friends/request',auth,async(req,res)=>{
   const username=clean(req.body.username).toLowerCase(); const r=await db.execute({sql:'SELECT * FROM users WHERE username=?',args:[username]}); const target=r.rows[0];
   if(!target)return res.status(404).json({error:'User not found'}); if(target.uid===req.uid)return res.status(400).json({error:"You can't add yourself"}); if(await blocked(req.uid,target.uid)||await blocked(target.uid,req.uid))return res.status(403).json({error:'Friend request unavailable'});
