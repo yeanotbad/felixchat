@@ -79,7 +79,9 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS system_status (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`,
     `CREATE TABLE IF NOT EXISTS push_subscriptions (endpoint TEXT PRIMARY KEY, uid TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS collectibles (id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL,rarity TEXT NOT NULL,value TEXT DEFAULT '',staff_only INTEGER DEFAULT 1,mod_grantable INTEGER DEFAULT 0,created_at INTEGER NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS user_collectibles (uid TEXT NOT NULL,collectible_id TEXT NOT NULL,granted_by TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(uid,collectible_id))`
+    `CREATE TABLE IF NOT EXISTS user_collectibles (uid TEXT NOT NULL,collectible_id TEXT NOT NULL,granted_by TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(uid,collectible_id))`,
+    `CREATE TABLE IF NOT EXISTS trade_offers (id TEXT PRIMARY KEY,from_uid TEXT NOT NULL,to_uid TEXT NOT NULL,give_json TEXT NOT NULL,want_json TEXT NOT NULL,status TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
+    `CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_offers(to_uid,status,created_at)`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -726,6 +728,33 @@ app.post('/api/polls', auth, async (req,res)=>{
 app.post('/api/polls/:id/vote', auth, async(req,res)=>{
   await db.execute({sql:'INSERT OR REPLACE INTO poll_votes(poll_id,uid,option_index,voted_at) VALUES(?,?,?,?)',args:[req.params.id,req.uid,Number(req.body.option),now()]});res.json({ok:true});
 });
+
+// Trading: friends can offer tradable collectibles, including tags. Official verification is never an inventory item.
+app.get('/api/trades/inventory/:uid?',auth,async(req,res)=>{
+  const uid=req.params.uid||req.uid;
+  if(uid!==req.uid && !await areFriends(req.uid,uid)) return res.status(403).json({error:'Trade only with friends'});
+  const r=await db.execute({sql:`SELECT c.* FROM user_collectibles uc JOIN collectibles c ON c.id=uc.collectible_id WHERE uc.uid=? ORDER BY uc.created_at DESC`,args:[uid]});
+  res.json({items:r.rows.filter(x=>x.id!=='verified')});
+});
+app.get('/api/trades',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM trade_offers WHERE from_uid=? OR to_uid=? ORDER BY created_at DESC LIMIT 100',args:[req.uid,req.uid]});res.json({trades:r.rows});});
+app.post('/api/trades',auth,async(req,res)=>{
+ const to=String(req.body.toUid||''); if(!to||to===req.uid)return res.status(400).json({error:'Choose a friend'}); if(!await areFriends(req.uid,to))return res.status(403).json({error:'You can only trade with friends'});
+ const give=[...new Set(Array.isArray(req.body.give)?req.body.give.map(String):[])].filter(Boolean),want=[...new Set(Array.isArray(req.body.want)?req.body.want.map(String):[])].filter(Boolean);
+ if(!give.length&&!want.length)return res.status(400).json({error:'Choose items'});
+ for(const cid of give){const own=await db.execute({sql:'SELECT 1 FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[req.uid,cid]});if(!own.rows.length)return res.status(400).json({error:'You do not own '+cid});}
+ for(const cid of want){const own=await db.execute({sql:'SELECT 1 FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[to,cid]});if(!own.rows.length)return res.status(400).json({error:'Friend no longer owns '+cid});}
+ const tid=id(),t=now();await db.execute({sql:'INSERT INTO trade_offers(id,from_uid,to_uid,give_json,want_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',args:[tid,req.uid,to,JSON.stringify(give),JSON.stringify(want),'pending',t,t]});
+ const from=(await getUser(req.uid))?.display_name||(await getUser(req.uid))?.username||'Someone'; broadcast(to,{type:'trade_request',tradeId:tid,from:req.uid,fromName:from}); sendPush(to,{title:'Felix Chat',body:from+' has sent you a trade request!',url:'/',tag:'trade-'+tid}).catch(()=>{});res.json({id:tid,status:'pending'});
+});
+app.post('/api/trades/:id/decline',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM trade_offers WHERE id=?',args:[req.params.id]});const tr=r.rows[0];if(!tr||tr.to_uid!==req.uid)return res.status(404).json({error:'Trade not found'});if(tr.status!=='pending')return res.status(400).json({error:'Trade already closed'});await db.execute({sql:'UPDATE trade_offers SET status=?,updated_at=? WHERE id=?',args:['declined',now(),tr.id]});res.json({ok:true});});
+app.post('/api/trades/:id/accept',auth,async(req,res)=>{const r=await db.execute({sql:'SELECT * FROM trade_offers WHERE id=?',args:[req.params.id]});const tr=r.rows[0];if(!tr||tr.to_uid!==req.uid)return res.status(404).json({error:'Trade not found'});if(tr.status!=='pending')return res.status(400).json({error:'Trade already closed'});const give=JSON.parse(tr.give_json||'[]'),want=JSON.parse(tr.want_json||'[]');
+ for(const cid of give){const q=await db.execute({sql:'SELECT * FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[tr.from_uid,cid]});if(!q.rows.length)return res.status(400).json({error:'Trade changed: sender no longer owns '+cid});}
+ for(const cid of want){const q=await db.execute({sql:'SELECT * FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[tr.to_uid,cid]});if(!q.rows.length)return res.status(400).json({error:'Trade changed: requested item unavailable'});}
+ for(const cid of give){await db.execute({sql:'DELETE FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[tr.from_uid,cid]});await db.execute({sql:'INSERT OR IGNORE INTO user_collectibles(uid,collectible_id,granted_by,created_at) VALUES(?,?,?,?)',args:[tr.to_uid,cid,tr.from_uid,now()]});}
+ for(const cid of want){await db.execute({sql:'DELETE FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[tr.to_uid,cid]});await db.execute({sql:'INSERT OR IGNORE INTO user_collectibles(uid,collectible_id,granted_by,created_at) VALUES(?,?,?,?)',args:[tr.from_uid,cid,tr.to_uid,now()]});}
+ await db.execute({sql:'UPDATE trade_offers SET status=?,updated_at=? WHERE id=?',args:['accepted',now(),tr.id]});res.json({ok:true});
+});
+
 app.get('/api/games',auth,async(req,res)=>res.json({games:['Tic Tac Toe','Rock Paper Scissors','Connect 4','Trivia']}));
 server.listen(PORT,()=>console.log('Felix Chat running on '+PORT));
 }).catch(e=>{console.error('DB init failed',e);process.exit(1);});
