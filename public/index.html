@@ -4354,6 +4354,9 @@ body.felix-ios-chat-open #messageInput{font-size:16px!important}
   document.addEventListener('touchend',function(e){if(!document.body.classList.contains('felix-ios-chat-open'))return;var t=e.changedTouches[0];var dx=t.clientX-startX,dy=t.clientY-startY;if(startX<28&&dx>90&&Math.abs(dx)>Math.abs(dy)*1.5)closeConversation();},{passive:true});
 })();
 </script>
+<style>
+.trade-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}.trade-columns section{min-width:0}.trade-scroll{max-height:42vh;overflow-y:auto;overflow-x:hidden;margin:8px 0;border:1px solid #2f3c5b;border-radius:12px;padding:6px;-webkit-overflow-scrolling:touch}.trade-scroll .request{display:block;margin:5px 0}.trade-scroll::-webkit-scrollbar{width:8px}@media(max-width:700px){.trade-columns{grid-template-columns:1fr}.trade-scroll{max-height:28vh}}
+</style>
 <script>
 // Felix Chat Trade UI: menu shortcut is intentionally lightweight and uses the existing modal system.
 async function openTradeCenter(){
@@ -4363,8 +4366,13 @@ async function openTradeCenter(){
  }catch(e){alert(e.message)}
 }
 async function openTradeWith(uid,name){
- try{const [mine,theirs]=await Promise.all([api('/trades/inventory'),api('/trades/inventory/'+uid)]); const pick=(items,side)=>items.map(x=>`<label class="request"><input type="checkbox" class="trade-${side}" value="${escapeHtml(x.id)}"> <b>${escapeHtml(x.name)}</b> <span class="small">${escapeHtml(x.rarity||'')}</span></label>`).join('')||'<p class="small">No tradable items.</p>';
- openModal(`<h2>🔄 Trade with @${escapeHtml(name)}</h2><h3>You give</h3>${pick(mine.items,'give')}<h3>You get</h3>${pick(theirs.items,'want')}<button class="btn primary" onclick="sendTrade('${uid}')">Send trade request</button>`);
+ try{
+  const [mine,theirs]=await Promise.all([api('/trades/inventory'),api('/trades/inventory/'+uid)]);
+  const render=(items,side,q='')=>{const query=q.trim().toLowerCase();const filtered=(items||[]).filter(x=>!query||String(x.name||'').toLowerCase().includes(query)||String(x.rarity||'').toLowerCase().includes(query));return filtered.map(x=>`<label class="request"><input type="checkbox" class="trade-${side}" value="${escapeHtml(x.id)}"> <b>${escapeHtml(x.name)}</b> <span class="small">${escapeHtml(x.rarity||'')}</span></label>`).join('')||'<p class="small">No matching tradable items.</p>';};
+  const html=`<h2>🔄 Trade with @${escapeHtml(name)}</h2><p class="small">Search and scroll through both inventories.</p><div class="trade-columns"><section><h3>You give</h3><input id="tradeGiveSearch" class="input" placeholder="🔎 Search your items..."><div id="tradeGiveList" class="trade-scroll"></div></section><section><h3>You get</h3><input id="tradeWantSearch" class="input" placeholder="🔎 Search their items..."><div id="tradeWantList" class="trade-scroll"></div></section></div><button class="btn primary" onclick="sendTrade('${uid}')">Send trade request</button>`;
+  openModal(html);
+  const update=()=>{const gs=document.getElementById('tradeGiveSearch')?.value||'',ws=document.getElementById('tradeWantSearch')?.value||'';document.getElementById('tradeGiveList').innerHTML=render(mine.items,'give',gs);document.getElementById('tradeWantList').innerHTML=render(theirs.items,'want',ws);};
+  document.getElementById('tradeGiveSearch').addEventListener('input',update);document.getElementById('tradeWantSearch').addEventListener('input',update);update();
  }catch(e){alert(e.message)}
 }
 async function sendTrade(uid){try{const give=[...document.querySelectorAll('.trade-give:checked')].map(x=>x.value),want=[...document.querySelectorAll('.trade-want:checked')].map(x=>x.value);await api('/trades',{method:'POST',body:JSON.stringify({toUid:uid,give,want})});alert('Trade request sent!');closeModal()}catch(e){alert(e.message)}}
