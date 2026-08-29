@@ -429,8 +429,32 @@ app.get('/api/admin/users',auth,async(req,res)=>{
   if(!await requireModerator(req,res))return;
   const q=clean(req.query.q||'').toLowerCase();
   const r=await db.execute({sql:`SELECT uid,username,display_name,bio,avatar,role,verified,banned,timeout_until,timeout_by,created_at,last_seen FROM users WHERE username LIKE ? OR display_name LIKE ? ORDER BY username LIMIT 100`,args:[`%${q}%`,`%${q}%`]});
-  res.json(r.rows.map(u=>({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',verified:Number(u.verified||0)===1,banned:Number(u.banned||0)===1,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',createdAt:u.created_at,lastSeen:u.last_seen})));
+  const users=[]; for(const u of r.rows){ const tr=await db.execute({sql:`SELECT c.id,c.name,c.type,c.rarity,c.value,c.mod_grantable FROM user_collectibles uc JOIN collectibles c ON c.id=uc.collectible_id WHERE uc.uid=? AND c.type='tag' ORDER BY uc.created_at`,args:[u.uid]}); users.push({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',verified:Number(u.verified||0)===1,banned:Number(u.banned||0)===1,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',createdAt:u.created_at,lastSeen:u.last_seen,tags:tr.rows}); } res.json(users);
 });
+
+app.get('/api/admin/tags/catalog',auth,async(req,res)=>{
+  if(!await requireModerator(req,res))return;
+  const actor=await getUser(req.uid); const role=String(actor?.role||'member').toLowerCase();
+  const q=role==='mod' ? `SELECT id,name,type,rarity,value,mod_grantable FROM collectibles WHERE type='tag' AND mod_grantable=1 ORDER BY created_at` : `SELECT id,name,type,rarity,value,mod_grantable FROM collectibles WHERE type='tag' ORDER BY created_at`;
+  const r=await db.execute({sql:q,args:[]}); res.json(r.rows);
+});
+app.post('/api/admin/tags/:uid',auth,async(req,res)=>{
+  if(!await requireModerator(req,res))return;
+  const target=await getUser(req.params.uid); if(!target)return res.status(404).json({error:'User not found'});
+  const actor=await getUser(req.uid); const role=String(actor?.role||'member').toLowerCase(); const id=String(req.body.collectibleId||'');
+  const r=await db.execute({sql:`SELECT * FROM collectibles WHERE id=? AND type='tag'`,args:[id]}); const tag=r.rows[0]; if(!tag)return res.status(404).json({error:'Tag not found'});
+  if(role==='mod' && Number(tag.mod_grantable||0)!==1)return res.status(403).json({error:'Mods can only grant approved smaller tags'});
+  await db.execute({sql:`INSERT OR IGNORE INTO user_collectibles(uid,collectible_id,granted_by,created_at) VALUES(?,?,?,?)`,args:[target.uid,id,actor.uid,now()]});
+  res.json({ok:true});
+});
+app.delete('/api/admin/tags/:uid/:tagId',auth,async(req,res)=>{
+  if(!await requireModerator(req,res))return;
+  const actor=await getUser(req.uid); const role=String(actor?.role||'member').toLowerCase();
+  const r=await db.execute({sql:`SELECT * FROM collectibles WHERE id=? AND type='tag'`,args:[req.params.tagId]}); const tag=r.rows[0]; if(!tag)return res.status(404).json({error:'Tag not found'});
+  if(role==='mod' && Number(tag.mod_grantable||0)!==1)return res.status(403).json({error:'Mods can only remove approved smaller tags'});
+  await db.execute({sql:`DELETE FROM user_collectibles WHERE uid=? AND collectible_id=?`,args:[req.params.uid,req.params.tagId]}); res.json({ok:true});
+});
+
 app.post('/api/admin/ban/:uid',auth,async(req,res)=>{
   if(!await requireModerator(req,res))return;
   const target=await getUser(req.params.uid);
