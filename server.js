@@ -82,8 +82,7 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS user_collectibles (uid TEXT NOT NULL,collectible_id TEXT NOT NULL,granted_by TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(uid,collectible_id))`,
     `CREATE TABLE IF NOT EXISTS trade_offers (id TEXT PRIMARY KEY,from_uid TEXT NOT NULL,to_uid TEXT NOT NULL,give_json TEXT NOT NULL,want_json TEXT NOT NULL,status TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_offers(to_uid,status,created_at)`,
-    `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`,
-    `CREATE TABLE IF NOT EXISTS shop_purchases (day TEXT NOT NULL, uid TEXT NOT NULL, collectible_id TEXT NOT NULL, purchased_at INTEGER NOT NULL, PRIMARY KEY(day,uid,collectible_id))`
+    `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -114,10 +113,112 @@ async function init() {
 ['voidwalker','VOID WALKER','tag','epic','',1,0],['stormmaster','STORM MASTER','tag','epic','',1,0],['firelord','FIRE LORD','tag','epic','',1,0],['frostborn','FROSTBORN','tag','epic','',1,0],['cyberlegend','CYBER LEGEND','tag','epic','',1,0],['galactic','GALACTIC','tag','epic','',1,0],['phantom','PHANTOM','tag','epic','',1,0],['eternalflame','ETERNAL FLAME','tag','epic','',1,0],['dreamwalker','DREAM WALKER','tag','epic','',1,0],['dimensional','DIMENSIONAL','tag','epic','',1,0],
 ['king','KING','tag','legendary','',1,0],['queen','QUEEN','tag','legendary','',1,0],['thundergod','THUNDER GOD','tag','legendary','',1,0],['universe','UNIVERSE','tag','legendary','',1,0],['inferno','INFERNO','tag','legendary','',1,0],['dragonlord','DRAGON LORD','tag','legendary','',1,0],['rainbowlegend','RAINBOW LEGEND','tag','legendary','rainbow',1,0],['starborn','STARBORN','tag','legendary','',1,0],['ultimate','ULTIMATE','tag','legendary','',1,0],['watcher','THE WATCHER','tag','legendary','',1,0],
 ['chud','CHUD','tag','common','',1,1],['loser','LOSER','tag','common','',1,1],['dweeb','DWEEB','tag','common','',1,1],['dork','DORK','tag','common','',1,1],['mania','MANIA','tag','rare','',1,0],['kevinchatsucks','kevinchatsucks','tag','rare','',1,0],
-['ohio','OHIO','tag','common','',1,1],['skibidi','SKIBIDI','tag','common','',1,1],['sigma','SIGMA','tag','uncommon','',1,1],['maxxer','MAXXER','tag','uncommon','',1,1],['aura','AURA','tag','common','',1,1],['aurafarmer','AURA FARMER','tag','rare','',1,0],['rizzler','RIZZLER','tag','uncommon','',1,1],['rizzgod','RIZZ GOD','tag','legendary','',1,0],['alpha','ALPHA','tag','uncommon','',1,1],['yapper','YAPPER','tag','common','',1,1],['crashout','CRASHOUT','tag','rare','',1,0],['balkanrage','BALKAN RAGE','tag','rare','',1,0],['stillwater','STILL WATER','tag','rare','',1,0],['mangomango','MANGO MANGO','tag','common','',1,1],['trollface','TROLLFACE','tag','uncommon','',1,1],['toiletking','TOILET KING','tag','epic','',1,0],['goated','GOATED','tag','rare','',1,0],['cooked','COOKED','tag','common','',1,1],['lockedin','LOCKED IN','tag','uncommon','',1,1],['thesigma','THE SIGMA','tag','epic','',1,0],['negativeaura','NEGATIVE AURA','tag','rare','',1,0],['auramaxxed','AURA MAXXED','tag','epic','',1,0],['brainrot','BRAINROT','tag','epic','',1,0],['gigachad','GIGA CHAD','tag','legendary','',1,0],['bananasigma','BANANA SIGMA','tag','rare','',1,0],['sus','SUS','tag','common','',1,1],['yapking','YAP KING','tag','rare','',1,0],['absolutecinema','ABSOLUTE CINEMA','tag','epic','',1,0],['peak','PEAK','tag','legendary','',1,0],['unhinged','UNHINGED','tag','epic','',1,0]
+['ohio','OHIO','tag','common','',1,1],['skibidi','SKIBIDI','tag','common','',1,1],['sigma','SIGMA','tag','uncommon','',1,1],['maxxer','MAXXER','tag','uncommon','',1,1],['aura','AURA','tag','common','',1,1],['aurafarmer','AURA FARMER','tag','rare','',1,0],['rizzler','RIZZLER','tag','uncommon','',1,1],['rizzgod','RIZZ GOD','tag','legendary','',1,0],['alpha','ALPHA','tag','uncommon','',1,1],['yapper','YAPPER','tag','common','',1,1],['crashout','CRASHOUT','tag','rare','',1,0],['balkanrage','BALKAN RAGE','tag','rare','',1,0],['stillwater','STILL WATER','tag','rare','',1,0],['mangomango','MANGO MANGO','tag','common','',1,1],['trollface','TROLLFACE','tag','uncommon','',1,1],['toiletking','TOILET KING','tag','epic','',1,0],['goated','GOATED','tag','rare','',1,0],['cooked','COOKED','tag','common','',1,1],['lockedin','LOCKED IN','tag','uncommon','',1,1],['thesigma','THE SIGMA','tag','epic','',1,0],['negativeaura','NEGATIVE AURA','tag','rare','',1,0],['auramaxxed','AURA MAXXED','tag','epic','',1,0],['brainrot','BRAINROT','tag','epic','',1,0],['gigachad','GIGA CHAD','tag','legendary','',1,0],['bananasigma','BANANA SIGMA','tag','rare','',1,0],['sus','SUS','tag','common','',1,1],['yapking','YAP KING','tag','rare','',1,0],['absolutecinema','ABSOLUTE CINEMA','tag','epic','',1,0],['peak','PEAK','tag','legendary','',1,0],['unhinged','UNHINGED','tag','epic','',1,0],
+['bonus_tag_001','CHAOS KING','tag','common','',1,1],['bonus_tag_002','MEME KING','tag','uncommon','',1,1],['bonus_tag_003','SUS KING','tag','rare','',1,0],['bonus_tag_004','YAP KING','tag','epic','',1,0],['bonus_tag_005','AURA KING','tag','legendary','',1,0],['bonus_tag_006','NPC KING','tag','common','',1,1],['bonus_tag_007','SIGMA KING','tag','uncommon','',1,1],['bonus_tag_008','RIZZ KING','tag','rare','',1,0],['bonus_tag_009','OHIO KING','tag','epic','',1,0],['bonus_tag_010','GOOFY KING','tag','legendary','',1,0],['bonus_tag_011','CRINGE KING','tag','common','',1,1],['bonus_tag_012','COOKED KING','tag','uncommon','',1,1],['bonus_tag_013','LOCKED KING','tag','rare','',1,0],['bonus_tag_014','UNHINGED KING','tag','epic','',1,0],['bonus_tag_015','PEAK KING','tag','legendary','',1,0],['bonus_tag_016','BRAINROT KING','tag','common','',1,1],['bonus_tag_017','TROLL KING','tag','uncommon','',1,1],['bonus_tag_018','MANGO KING','tag','rare','',1,0],['bonus_tag_019','BANANA KING','tag','epic','',1,0],['bonus_tag_020','SKIBIDI KING','tag','legendary','',1,0],['bonus_tag_021','CHAOS LORD','tag','common','',1,1],['bonus_tag_022','MEME LORD','tag','uncommon','',1,1],['bonus_tag_023','SUS LORD','tag','rare','',1,0],['bonus_tag_024','YAP LORD','tag','epic','',1,0],['bonus_tag_025','AURA LORD','tag','legendary','',1,0],['bonus_tag_026','NPC LORD','tag','common','',1,1],['bonus_tag_027','SIGMA LORD','tag','uncommon','',1,1],['bonus_tag_028','RIZZ LORD','tag','rare','',1,0],['bonus_tag_029','OHIO LORD','tag','epic','',1,0],['bonus_tag_030','GOOFY LORD','tag','legendary','',1,0],['bonus_tag_031','CRINGE LORD','tag','common','',1,1],['bonus_tag_032','COOKED LORD','tag','uncommon','',1,1],['bonus_tag_033','LOCKED LORD','tag','rare','',1,0],['bonus_tag_034','UNHINGED LORD','tag','epic','',1,0],['bonus_tag_035','PEAK LORD','tag','legendary','',1,0],['bonus_tag_036','BRAINROT LORD','tag','common','',1,1],['bonus_tag_037','TROLL LORD','tag','uncommon','',1,1],['bonus_tag_038','MANGO LORD','tag','rare','',1,0],['bonus_tag_039','BANANA LORD','tag','epic','',1,0],['bonus_tag_040','SKIBIDI LORD','tag','legendary','',1,0],['bonus_tag_041','CHAOS MASTER','tag','common','',1,1],['bonus_tag_042','MEME MASTER','tag','uncommon','',1,1],['bonus_tag_043','SUS MASTER','tag','rare','',1,0],['bonus_tag_044','YAP MASTER','tag','epic','',1,0],['bonus_tag_045','AURA MASTER','tag','legendary','',1,0],['bonus_tag_046','NPC MASTER','tag','common','',1,1],['bonus_tag_047','SIGMA MASTER','tag','uncommon','',1,1],['bonus_tag_048','RIZZ MASTER','tag','rare','',1,0],['bonus_tag_049','OHIO MASTER','tag','epic','',1,0],['bonus_tag_050','GOOFY MASTER','tag','legendary','',1,0],['bonus_tag_051','CRINGE MASTER','tag','common','',1,1],['bonus_tag_052','COOKED MASTER','tag','uncommon','',1,1],['bonus_tag_053','LOCKED MASTER','tag','rare','',1,0],['bonus_tag_054','UNHINGED MASTER','tag','epic','',1,0],['bonus_tag_055','PEAK MASTER','tag','legendary','',1,0],['bonus_tag_056','BRAINROT MASTER','tag','common','',1,1],['bonus_tag_057','TROLL MASTER','tag','uncommon','',1,1],['bonus_tag_058','MANGO MASTER','tag','rare','',1,0],['bonus_tag_059','BANANA MASTER','tag','epic','',1,0],['bonus_tag_060','SKIBIDI MASTER','tag','legendary','',1,0],['bonus_tag_061','CHAOS GREMLIN','tag','common','',1,1],['bonus_tag_062','MEME GREMLIN','tag','uncommon','',1,1],['bonus_tag_063','SUS GREMLIN','tag','rare','',1,0],['bonus_tag_064','YAP GREMLIN','tag','epic','',1,0],['bonus_tag_065','AURA GREMLIN','tag','legendary','',1,0],['bonus_tag_066','NPC GREMLIN','tag','common','',1,1],['bonus_tag_067','SIGMA GREMLIN','tag','uncommon','',1,1],['bonus_tag_068','RIZZ GREMLIN','tag','rare','',1,0],['bonus_tag_069','OHIO GREMLIN','tag','epic','',1,0],['bonus_tag_070','GOOFY GREMLIN','tag','legendary','',1,0],['bonus_tag_071','CRINGE GREMLIN','tag','common','',1,1],['bonus_tag_072','COOKED GREMLIN','tag','uncommon','',1,1],['bonus_tag_073','LOCKED GREMLIN','tag','rare','',1,0],['bonus_tag_074','UNHINGED GREMLIN','tag','epic','',1,0],['bonus_tag_075','PEAK GREMLIN','tag','legendary','',1,0],['bonus_tag_076','BRAINROT GREMLIN','tag','common','',1,1],['bonus_tag_077','TROLL GREMLIN','tag','uncommon','',1,1],['bonus_tag_078','MANGO GREMLIN','tag','rare','',1,0],['bonus_tag_079','BANANA GREMLIN','tag','epic','',1,0],['bonus_tag_080','SKIBIDI GREMLIN','tag','legendary','',1,0],['bonus_tag_081','CHAOS WIZARD','tag','common','',1,1],['bonus_tag_082','MEME WIZARD','tag','uncommon','',1,1],['bonus_tag_083','SUS WIZARD','tag','rare','',1,0],['bonus_tag_084','YAP WIZARD','tag','epic','',1,0],['bonus_tag_085','AURA WIZARD','tag','legendary','',1,0],['bonus_tag_086','NPC WIZARD','tag','common','',1,1],['bonus_tag_087','SIGMA WIZARD','tag','uncommon','',1,1],['bonus_tag_088','RIZZ WIZARD','tag','rare','',1,0],['bonus_tag_089','OHIO WIZARD','tag','epic','',1,0],['bonus_tag_090','GOOFY WIZARD','tag','legendary','',1,0],['bonus_tag_091','CRINGE WIZARD','tag','common','',1,1],['bonus_tag_092','COOKED WIZARD','tag','uncommon','',1,1],['bonus_tag_093','LOCKED WIZARD','tag','rare','',1,0],['bonus_tag_094','UNHINGED WIZARD','tag','epic','',1,0],['bonus_tag_095','PEAK WIZARD','tag','legendary','',1,0],['bonus_tag_096','BRAINROT WIZARD','tag','common','',1,1],['bonus_tag_097','TROLL WIZARD','tag','uncommon','',1,1],['bonus_tag_098','MANGO WIZARD','tag','rare','',1,0],['bonus_tag_099','BANANA WIZARD','tag','epic','',1,0],['bonus_tag_100','SKIBIDI WIZARD','tag','legendary','',1,0],
 ];
   for(const x of starter) try{await db.execute({sql:'INSERT OR IGNORE INTO collectibles(id,name,type,rarity,value,staff_only,mod_grantable,created_at) VALUES(?,?,?,?,?,?,?,?)',args:[...x,now()]})}catch(e){}
   const tradeItems=[
+
+    ['brainrot_item_001','OHIO ROCK 1','item','common','',1,0],
+    ['brainrot_item_002','SKIBIDI TOILET 1','item','uncommon','',1,0],
+    ['brainrot_item_003','SIGMA BANANA 1','item','rare','',1,0],
+    ['brainrot_item_004','AURA POTION 1','item','epic','',1,0],
+    ['brainrot_item_005','RIZZ CANNON 1','item','legendary','',1,0],
+    ['brainrot_item_006','NPC REMOTE 1','item','common','',1,0],
+    ['brainrot_item_007','YAP MEGAPHONE 1','item','uncommon','',1,0],
+    ['brainrot_item_008','BRAINROT BRAIN 1','item','rare','',1,0],
+    ['brainrot_item_009','SUS AMULET 1','item','epic','',1,0],
+    ['brainrot_item_010','MANGO RELIC 1','item','legendary','',1,0],
+    ['brainrot_item_011','COOKED PAN 1','item','common','',1,0],
+    ['brainrot_item_012','STILL WATER 1','item','uncommon','',1,0],
+    ['brainrot_item_013','TROLL MASK 1','item','rare','',1,0],
+    ['brainrot_item_014','GIGA CHAD TROPHY 1','item','epic','',1,0],
+    ['brainrot_item_015','NEGATIVE AURA RECEIPT 1','item','legendary','',1,0],
+    ['brainrot_item_016','AURA FARM 1','item','common','',1,0],
+    ['brainrot_item_017','GOOFY GOBLET 1','item','uncommon','',1,0],
+    ['brainrot_item_018','CRINGE SHIELD 1','item','rare','',1,0],
+    ['brainrot_item_019','PEAK POPCORN 1','item','epic','',1,0],
+    ['brainrot_item_020','CHAOS CUBE 1','item','legendary','',1,0],
+    ['brainrot_item_021','OHIO ROCK 2','item','common','',1,0],
+    ['brainrot_item_022','SKIBIDI TOILET 2','item','uncommon','',1,0],
+    ['brainrot_item_023','SIGMA BANANA 2','item','rare','',1,0],
+    ['brainrot_item_024','AURA POTION 2','item','epic','',1,0],
+    ['brainrot_item_025','RIZZ CANNON 2','item','legendary','',1,0],
+    ['brainrot_item_026','NPC REMOTE 2','item','common','',1,0],
+    ['brainrot_item_027','YAP MEGAPHONE 2','item','uncommon','',1,0],
+    ['brainrot_item_028','BRAINROT BRAIN 2','item','rare','',1,0],
+    ['brainrot_item_029','SUS AMULET 2','item','epic','',1,0],
+    ['brainrot_item_030','MANGO RELIC 2','item','legendary','',1,0],
+    ['brainrot_item_031','COOKED PAN 2','item','common','',1,0],
+    ['brainrot_item_032','STILL WATER 2','item','uncommon','',1,0],
+    ['brainrot_item_033','TROLL MASK 2','item','rare','',1,0],
+    ['brainrot_item_034','GIGA CHAD TROPHY 2','item','epic','',1,0],
+    ['brainrot_item_035','NEGATIVE AURA RECEIPT 2','item','legendary','',1,0],
+    ['brainrot_item_036','AURA FARM 2','item','common','',1,0],
+    ['brainrot_item_037','GOOFY GOBLET 2','item','uncommon','',1,0],
+    ['brainrot_item_038','CRINGE SHIELD 2','item','rare','',1,0],
+    ['brainrot_item_039','PEAK POPCORN 2','item','epic','',1,0],
+    ['brainrot_item_040','CHAOS CUBE 2','item','legendary','',1,0],
+    ['brainrot_item_041','OHIO ROCK 3','item','common','',1,0],
+    ['brainrot_item_042','SKIBIDI TOILET 3','item','uncommon','',1,0],
+    ['brainrot_item_043','SIGMA BANANA 3','item','rare','',1,0],
+    ['brainrot_item_044','AURA POTION 3','item','epic','',1,0],
+    ['brainrot_item_045','RIZZ CANNON 3','item','legendary','',1,0],
+    ['brainrot_item_046','NPC REMOTE 3','item','common','',1,0],
+    ['brainrot_item_047','YAP MEGAPHONE 3','item','uncommon','',1,0],
+    ['brainrot_item_048','BRAINROT BRAIN 3','item','rare','',1,0],
+    ['brainrot_item_049','SUS AMULET 3','item','epic','',1,0],
+    ['brainrot_item_050','MANGO RELIC 3','item','legendary','',1,0],
+    ['brainrot_item_051','COOKED PAN 3','item','common','',1,0],
+    ['brainrot_item_052','STILL WATER 3','item','uncommon','',1,0],
+    ['brainrot_item_053','TROLL MASK 3','item','rare','',1,0],
+    ['brainrot_item_054','GIGA CHAD TROPHY 3','item','epic','',1,0],
+    ['brainrot_item_055','NEGATIVE AURA RECEIPT 3','item','legendary','',1,0],
+    ['brainrot_item_056','AURA FARM 3','item','common','',1,0],
+    ['brainrot_item_057','GOOFY GOBLET 3','item','uncommon','',1,0],
+    ['brainrot_item_058','CRINGE SHIELD 3','item','rare','',1,0],
+    ['brainrot_item_059','PEAK POPCORN 3','item','epic','',1,0],
+    ['brainrot_item_060','CHAOS CUBE 3','item','legendary','',1,0],
+    ['brainrot_item_061','OHIO ROCK 4','item','common','',1,0],
+    ['brainrot_item_062','SKIBIDI TOILET 4','item','uncommon','',1,0],
+    ['brainrot_item_063','SIGMA BANANA 4','item','rare','',1,0],
+    ['brainrot_item_064','AURA POTION 4','item','epic','',1,0],
+    ['brainrot_item_065','RIZZ CANNON 4','item','legendary','',1,0],
+    ['brainrot_item_066','NPC REMOTE 4','item','common','',1,0],
+    ['brainrot_item_067','YAP MEGAPHONE 4','item','uncommon','',1,0],
+    ['brainrot_item_068','BRAINROT BRAIN 4','item','rare','',1,0],
+    ['brainrot_item_069','SUS AMULET 4','item','epic','',1,0],
+    ['brainrot_item_070','MANGO RELIC 4','item','legendary','',1,0],
+    ['brainrot_item_071','COOKED PAN 4','item','common','',1,0],
+    ['brainrot_item_072','STILL WATER 4','item','uncommon','',1,0],
+    ['brainrot_item_073','TROLL MASK 4','item','rare','',1,0],
+    ['brainrot_item_074','GIGA CHAD TROPHY 4','item','epic','',1,0],
+    ['brainrot_item_075','NEGATIVE AURA RECEIPT 4','item','legendary','',1,0],
+    ['brainrot_item_076','AURA FARM 4','item','common','',1,0],
+    ['brainrot_item_077','GOOFY GOBLET 4','item','uncommon','',1,0],
+    ['brainrot_item_078','CRINGE SHIELD 4','item','rare','',1,0],
+    ['brainrot_item_079','PEAK POPCORN 4','item','epic','',1,0],
+    ['brainrot_item_080','CHAOS CUBE 4','item','legendary','',1,0],
+    ['brainrot_item_081','OHIO ROCK 5','item','common','',1,0],
+    ['brainrot_item_082','SKIBIDI TOILET 5','item','uncommon','',1,0],
+    ['brainrot_item_083','SIGMA BANANA 5','item','rare','',1,0],
+    ['brainrot_item_084','AURA POTION 5','item','epic','',1,0],
+    ['brainrot_item_085','RIZZ CANNON 5','item','legendary','',1,0],
+    ['brainrot_item_086','NPC REMOTE 5','item','common','',1,0],
+    ['brainrot_item_087','YAP MEGAPHONE 5','item','uncommon','',1,0],
+    ['brainrot_item_088','BRAINROT BRAIN 5','item','rare','',1,0],
+    ['brainrot_item_089','SUS AMULET 5','item','epic','',1,0],
+    ['brainrot_item_090','MANGO RELIC 5','item','legendary','',1,0],
+    ['brainrot_item_091','COOKED PAN 5','item','common','',1,0],
+    ['brainrot_item_092','STILL WATER 5','item','uncommon','',1,0],
+    ['brainrot_item_093','TROLL MASK 5','item','rare','',1,0],
+    ['brainrot_item_094','GIGA CHAD TROPHY 5','item','epic','',1,0],
+    ['brainrot_item_095','NEGATIVE AURA RECEIPT 5','item','legendary','',1,0],
+    ['brainrot_item_096','AURA FARM 5','item','common','',1,0],
+    ['brainrot_item_097','GOOFY GOBLET 5','item','uncommon','',1,0],
+    ['brainrot_item_098','CRINGE SHIELD 5','item','rare','',1,0],
+    ['brainrot_item_099','PEAK POPCORN 5','item','epic','',1,0],
+    ['brainrot_item_100','CHAOS CUBE 5','item','legendary','',1,0],
     ['bronze_coin','BRONZE COIN','item','common','',1,0],
     ['lucky_clover','LUCKY CLOVER','item','common','',1,0],
     ['smiley_cube','SMILEY CUBE','item','common','',1,0],
@@ -183,8 +284,6 @@ async function init() {
 ['item_dragon_king','Dragon King Relic','item','legendary','',0,0],['item_time','Time Crystal','item','legendary','',0,0],['item_sun','Sun Core','item','legendary','',0,0],['item_celestial','Celestial Crown','item','legendary','',0,0],['item_felix','Felix Trophy','item','legendary','',0,0]
 ]) try{await db.execute({sql:'INSERT OR IGNORE INTO collectibles(id,name,type,rarity,value,staff_only,mod_grantable,created_at) VALUES(?,?,?,?,?,?,?,?)',args:[...x,now()]})}catch(e){}
 
-  const funnyHundred=[['funny_tag_1', 'BRAINROT SUPREME', 'tag', 'common', '', 1, 1], ['funny_tag_2', 'OHIO BOSS', 'tag', 'common', '', 1, 1], ['funny_tag_3', 'RIZZ MASTER', 'tag', 'common', '', 1, 1], ['funny_tag_4', 'CERTIFIED COOKED', 'tag', 'common', '', 1, 1], ['funny_tag_5', 'PROFESSIONAL YAPPER', 'tag', 'common', '', 1, 1], ['funny_tag_6', 'SIGMA PRIME', 'tag', 'common', '', 1, 1], ['funny_tag_7', 'AURA BANKRUPT', 'tag', 'common', '', 1, 1], ['funny_tag_8', 'AURA MILLIONAIRE', 'tag', 'common', '', 1, 1], ['funny_tag_9', 'TROLL MASTER', 'tag', 'common', '', 1, 1], ['funny_tag_10', 'CLOWN MODE', 'tag', 'common', '', 1, 1], ['funny_tag_11', 'ICE COLD', 'tag', 'uncommon', '', 1, 1], ['funny_tag_12', 'ABSOLUTELY COOKING', 'tag', 'uncommon', '', 1, 1], ['funny_tag_13', 'NPC DESTROYER', 'tag', 'uncommon', '', 1, 1], ['funny_tag_14', 'SIDE EYE MASTER', 'tag', 'uncommon', '', 1, 1], ['funny_tag_15', 'JUICE LORD', 'tag', 'uncommon', '', 1, 1], ['funny_tag_16', 'CRASHOUT KING', 'tag', 'uncommon', '', 1, 1], ['funny_tag_17', 'BRAIN CELL OWNER', 'tag', 'uncommon', '', 1, 1], ['funny_tag_18', 'MENACE', 'tag', 'uncommon', '', 1, 1], ['funny_tag_19', 'FROG SIGMA', 'tag', 'uncommon', '', 1, 1], ['funny_tag_20', 'PIZZA LORD', 'tag', 'uncommon', '', 1, 1], ['funny_tag_21', 'YAPATHON WINNER', 'tag', 'rare', '', 1, 0], ['funny_tag_22', 'DRAMA DETECTOR', 'tag', 'rare', '', 1, 0], ['funny_tag_23', 'MYSTERIOUS AURA', 'tag', 'rare', '', 1, 0], ['funny_tag_24', 'BRO IS DONE', 'tag', 'rare', '', 1, 0], ['funny_tag_25', 'NPC ENERGY', 'tag', 'rare', '', 1, 0], ['funny_tag_26', 'MAXIMUM RIZZ', 'tag', 'rare', '', 1, 0], ['funny_tag_27', 'LONE SIGMA', 'tag', 'rare', '', 1, 0], ['funny_tag_28', 'STILL WATER SURVIVOR', 'tag', 'rare', '', 1, 0], ['funny_tag_29', 'BANANA BOSS', 'tag', 'rare', '', 1, 0], ['funny_tag_30', 'MANGO LORD', 'tag', 'rare', '', 1, 0], ['funny_tag_31', 'STONE FACED', 'tag', 'epic', '', 1, 0], ['funny_tag_32', 'WHAT IS HAPPENING', 'tag', 'epic', '', 1, 0], ['funny_tag_33', 'KING OF YAPPING', 'tag', 'epic', '', 1, 0], ['funny_tag_34', 'TERMINALLY ONLINE', 'tag', 'epic', '', 1, 0], ['funny_tag_35', '3AM THINKER', 'tag', 'epic', '', 1, 0], ['funny_tag_36', 'CHAOS MODE', 'tag', 'epic', '', 1, 0], ['funny_tag_37', 'ZERO THOUGHTS', 'tag', 'epic', '', 1, 0], ['funny_tag_38', 'GOAT STATUS', 'tag', 'epic', '', 1, 0], ['funny_tag_39', 'EMOTIONAL DAMAGE', 'tag', 'epic', '', 1, 0], ['funny_tag_40', 'PEAK HUMAN', 'tag', 'epic', '', 1, 0], ['funny_tag_41', 'FRENCH FRY FANATIC', 'tag', 'legendary', '', 1, 0], ['funny_tag_42', 'SUS DETECTIVE', 'tag', 'legendary', '', 1, 0], ['funny_tag_43', 'FREEDOM MODE', 'tag', 'legendary', '', 1, 0], ['funny_tag_44', 'CERTIFIED DWEEB', 'tag', 'legendary', '', 1, 0], ['funny_tag_45', 'LORE ACCURATE', 'tag', 'legendary', '', 1, 0], ['funny_tag_46', 'BACKGROUND CHARACTER', 'tag', 'legendary', '', 1, 0], ['funny_tag_47', 'MAIN CHARACTER', 'tag', 'legendary', '', 1, 0], ['funny_tag_48', 'REALITY GLITCHED', 'tag', 'legendary', '', 1, 0], ['funny_tag_49', 'TOO MUCH AURA', 'tag', 'legendary', '', 1, 0], ['funny_tag_50', 'RIZZBOW LEGEND', 'tag', 'legendary', '', 1, 0], ['funny_item_1', 'Ohio Rock', 'item', 'common', '', 0, 0], ['funny_item_2', 'Brainrot Brain', 'item', 'common', '', 0, 0], ['funny_item_3', 'Golden Toilet', 'item', 'common', '', 0, 0], ['funny_item_4', 'Sigma Banana', 'item', 'common', '', 0, 0], ['funny_item_5', 'Mango of Destiny', 'item', 'common', '', 0, 0], ['funny_item_6', 'Rizz Potion', 'item', 'common', '', 0, 0], ['funny_item_7', 'Sigma Wolf Plush', 'item', 'common', '', 0, 0], ['funny_item_8', 'Emergency Clown Nose', 'item', 'common', '', 0, 0], ['funny_item_9', 'Legendary Juice Box', 'item', 'common', '', 0, 0], ['funny_item_10', 'Sigma Frog', 'item', 'common', '', 0, 0], ['funny_item_11', 'Infinite Pizza Slice', 'item', 'uncommon', '', 0, 0], ['funny_item_12', 'Cooked Skull', 'item', 'uncommon', '', 0, 0], ['funny_item_13', 'NPC Phone', 'item', 'uncommon', '', 0, 0], ['funny_item_14', 'Troll Mask', 'item', 'uncommon', '', 0, 0], ['funny_item_15', 'Side Eye Glasses', 'item', 'uncommon', '', 0, 0], ['funny_item_16', 'Golden Megaphone', 'item', 'uncommon', '', 0, 0], ['funny_item_17', 'Aura Statue', 'item', 'uncommon', '', 0, 0], ['funny_item_18', 'Cooking Pan', 'item', 'uncommon', '', 0, 0], ['funny_item_19', 'Ice Aura Cube', 'item', 'uncommon', '', 0, 0], ['funny_item_20', 'Negative Aura Receipt', 'item', 'uncommon', '', 0, 0], ['funny_item_21', 'Aura Stocks', 'item', 'rare', '', 0, 0], ['funny_item_22', 'Single Brain Cell', 'item', 'rare', '', 0, 0], ['funny_item_23', 'GOAT Trophy', 'item', 'rare', '', 0, 0], ['funny_item_24', 'Mythic French Fry', 'item', 'rare', '', 0, 0], ['funny_item_25', 'Crashout Rose', 'item', 'rare', '', 0, 0], ['funny_item_26', 'Bottle of Still Water', 'item', 'rare', '', 0, 0], ['funny_item_27', 'NPC Action Figure', 'item', 'rare', '', 0, 0], ['funny_item_28', 'Main Character Crown', 'item', 'rare', '', 0, 0], ['funny_item_29', 'Dweeb Glasses', 'item', 'rare', '', 0, 0], ['funny_item_30', 'Drama Detector', 'item', 'rare', '', 0, 0], ['funny_item_31', 'Menace Alarm', 'item', 'epic', '', 0, 0], ['funny_item_32', 'Reality Glitch Cube', 'item', 'epic', '', 0, 0], ['funny_item_33', 'Yapper Crown', 'item', 'epic', '', 0, 0], ['funny_item_34', 'Suspicious Bread', 'item', 'epic', '', 0, 0], ['funny_item_35', 'Rubber Duck of Power', 'item', 'epic', '', 0, 0], ['funny_item_36', 'Flying Fish', 'item', 'epic', '', 0, 0], ['funny_item_37', 'Legendary Potato', 'item', 'epic', '', 0, 0], ['funny_item_38', 'Mythic Sock', 'item', 'epic', '', 0, 0], ['funny_item_39', 'Gaming Chair Relic', 'item', 'epic', '', 0, 0], ['funny_item_40', 'Trash Crown', 'item', 'epic', '', 0, 0], ['funny_item_41', 'Spoon of Destiny', 'item', 'legendary', '', 0, 0], ['funny_item_42', 'Chicken Nugget Trophy', 'item', 'legendary', '', 0, 0], ['funny_item_43', 'Watermelon Core', 'item', 'legendary', '', 0, 0], ['funny_item_44', 'Soap of Wisdom', 'item', 'legendary', '', 0, 0], ['funny_item_45', 'Tiny Dinosaur', 'item', 'legendary', '', 0, 0], ['funny_item_46', 'Sigma Top Hat', 'item', 'legendary', '', 0, 0], ['funny_item_47', 'Aura Disco Ball', 'item', 'legendary', '', 0, 0], ['funny_item_48', 'Ohio UFO', 'item', 'legendary', '', 0, 0], ['funny_item_49', 'Anti-Cringe Charm', 'item', 'legendary', '', 0, 0], ['funny_item_50', 'Ultimate Brainrot Crown', 'item', 'legendary', '', 0, 0]];
-  for(const x of funnyHundred) try{await db.execute({sql:'INSERT OR IGNORE INTO collectibles(id,name,type,rarity,value,staff_only,mod_grantable,created_at) VALUES(?,?,?,?,?,?,?,?)',args:[...x,now()]})}catch(e){}
 
   // @felixchat automatically owns every collectible/tag. The DEVELOPER tag is exclusive.
   try {
@@ -465,7 +564,6 @@ app.post('/api/messages/:uid',auth,async(req,res)=>{
   const text=String(req.body.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'Empty message'});
   const m={id:id(),from:req.uid,to:other,text,kind:'text',url:'',name:'',mime:'',time:now(),readAt:null,expiresAt:req.body.disappearing?now()+86400000:null,replyTo:req.body.replyTo||null,edited:false};
   await db.execute({sql:`INSERT INTO messages(id,chat_key,sender_id,receiver_id,text,kind,created_at,expires_at,reply_to) VALUES(?,?,?,?,?,?,?,?,?)`,args:[m.id,chatKey(req.uid,other),req.uid,other,m.text,'text',m.time,m.expiresAt,m.replyTo]});
-  await db.execute({sql:'UPDATE users SET felix_score=COALESCE(felix_score,0)+1 WHERE uid=?',args:[req.uid]});
   broadcast(other,{type:'message',message:m});
   sendPush(other,{title:'Felix Chat',body:(sender?.display_name||sender?.username||'Someone')+': '+text,url:'/',tag:'chat-'+req.uid}).catch(()=>{});
   const streak=await touchFriendStreak(req.uid,other);
@@ -873,14 +971,6 @@ app.post('/api/trades/:id/accept',auth,async(req,res)=>{const r=await db.execute
  await db.execute({sql:'UPDATE trade_offers SET status=?,updated_at=? WHERE id=?',args:['accepted',now(),tr.id]});res.json({ok:true});
 });
 
-
-// Felix Shop: 5 rotating collectibles per UTC day, paid with Felix Bucks (felix_score).
-const SHOP_PRICES={common:500,uncommon:1500,rare:3000,epic:6000,legendary:10000,mythic:15000};
-function shopDay(){return new Date().toISOString().slice(0,10)}
-async function dailyShop(){const all=(await db.execute({sql:"SELECT * FROM collectibles WHERE id!='verified' ORDER BY id",args:[]})).rows;const d=shopDay();let h=0;for(const c of d)h=((h*31)+c.charCodeAt(0))>>>0;const picked=[];for(let i=0;all.length&&picked.length<5;i++){const x=all[(h+i*97)%all.length];if(!picked.some(p=>p.id===x.id))picked.push(x)}return picked.map(x=>({...x,price:SHOP_PRICES[String(x.rarity).toLowerCase()]||500}))}
-app.get('/api/shop',auth,async(req,res)=>{const u=await getUser(req.uid);res.json({day:shopDay(),bucks:Number(u?.felix_score||0),items:await dailyShop()})});
-app.post('/api/shop/buy/:id',auth,async(req,res)=>{const item=(await dailyShop()).find(x=>x.id===req.params.id);if(!item)return res.status(400).json({error:'This item is not in today\'s shop'});const price=Number(item.price);const u=await getUser(req.uid);if(Number(u?.felix_score||0)<price)return res.status(400).json({error:'Not enough Felix Bucks'});const own=await db.execute({sql:'SELECT 1 FROM user_collectibles WHERE uid=? AND collectible_id=?',args:[req.uid,item.id]});if(own.rows[0])return res.status(400).json({error:'You already own this item'});await db.batch([{sql:'UPDATE users SET felix_score=felix_score-? WHERE uid=?',args:[price,req.uid]},{sql:'INSERT INTO user_collectibles(uid,collectible_id,granted_by,created_at) VALUES(?,?,?,?)',args:[req.uid,item.id,'felix_shop',now()]},{sql:'INSERT OR IGNORE INTO shop_purchases(day,uid,collectible_id,purchased_at) VALUES(?,?,?,?)',args:[shopDay(),req.uid,item.id,now()]}],'write');res.json({ok:true,bucks:Number(u.felix_score||0)-price})});
-
 app.get('/api/games',auth,async(req,res)=>res.json({games:['Tic Tac Toe','Rock Paper Scissors','Connect 4','Trivia']}));
 server.listen(PORT,()=>console.log('Felix Chat running on '+PORT));
 }).catch(e=>{console.error('DB init failed',e);process.exit(1);});
@@ -888,10 +978,3 @@ server.listen(PORT,()=>console.log('Felix Chat running on '+PORT));
 // Public collectible inventory + equipped tags
 app.get('/api/collectibles/:uid',auth,async(req,res)=>{try{const u=await getUser(req.params.uid);if(!u)return res.status(404).json({error:'User not found'});const isSelf=u.uid===req.uid;if(!isSelf && !(await areFriends(req.uid,u.uid)))return res.status(403).json({error:'Friends only'});const r=await db.execute({sql:`SELECT c.id,c.name,c.type,c.rarity,c.value,c.mod_grantable,uc.created_at FROM user_collectibles uc JOIN collectibles c ON c.id=uc.collectible_id WHERE uc.uid=? ORDER BY uc.created_at DESC`,args:[u.uid]});res.json({items:r.rows});}catch(e){res.status(500).json({error:e.message})}});
 app.get('/api/collectibles/me/equipped',auth,async(req,res)=>{try{const r=await db.execute({sql:`SELECT c.id,c.name,c.rarity,c.value FROM user_collectibles uc JOIN collectibles c ON c.id=uc.collectible_id WHERE uc.uid=? AND c.type='tag' ORDER BY uc.created_at DESC LIMIT 5`,args:[req.uid]});res.json({tags:r.rows});}catch(e){res.status(500).json({error:e.message})}});
-
-// Felix Bucks transfers and skill-game rewards.
-app.post('/api/bucks/send',auth,async(req,res)=>{try{const toUid=String(req.body.uid||'');const amount=Math.floor(Number(req.body.amount||0));if(!toUid||toUid===req.uid)return res.status(400).json({error:'Choose a different friend'});if(!Number.isFinite(amount)||amount<1)return res.status(400).json({error:'Enter a valid amount'});const fr=await db.execute({sql:"SELECT 1 FROM friendships WHERE user_id=? AND friend_id=? AND status='accepted'",args:[req.uid,toUid]});if(!fr.rows[0])return res.status(403).json({error:'You can only send Felix Bucks to friends'});const me=await getUser(req.uid),them=await getUser(toUid);if(!them)return res.status(404).json({error:'User not found'});if(Number(me.felix_score||0)<amount)return res.status(400).json({error:'Not enough Felix Bucks'});await db.batch([{sql:'UPDATE users SET felix_score=felix_score-? WHERE uid=?',args:[amount,req.uid]},{sql:'UPDATE users SET felix_score=felix_score+? WHERE uid=?',args:[amount,toUid]}],'write');broadcast(toUid,{type:'felix_bucks_received',from:me.username,amount});res.json({ok:true,bucks:Number(me.felix_score)-amount})}catch(e){console.error(e);res.status(500).json({error:'Could not send Felix Bucks'})}});
-
-const GAME_REWARDS={quicktap:100,reaction:250,memory:500,trivia:1000};
-app.get('/api/games',auth,async(req,res)=>{const u=await getUser(req.uid);res.json({bucks:Number(u?.felix_score||0),games:Object.entries(GAME_REWARDS).map(([id,reward])=>({id,reward}))})});
-app.post('/api/games/reward',auth,async(req,res)=>{const id=String(req.body.id||'');const reward=GAME_REWARDS[id];if(!reward)return res.status(400).json({error:'Unknown game'});const key='game:'+id+':'+req.uid;const cooldown=id==='trivia'?600000:id==='memory'?300000:120000;const row=(await db.execute({sql:'SELECT value FROM system_status WHERE key=?',args:[key]})).rows[0];const last=Number(row?.value||0);if(now()-last<cooldown)return res.status(429).json({error:'Game cooldown active. Try again soon.'});await db.batch([{sql:'UPDATE users SET felix_score=felix_score+? WHERE uid=?',args:[reward,req.uid]},{sql:'INSERT INTO system_status(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',args:[key,String(now())]}],'write');const u=await getUser(req.uid);res.json({ok:true,reward,bucks:Number(u.felix_score||0)})});
