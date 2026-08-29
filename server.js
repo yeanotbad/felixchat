@@ -81,7 +81,8 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS collectibles (id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL,rarity TEXT NOT NULL,value TEXT DEFAULT '',staff_only INTEGER DEFAULT 1,mod_grantable INTEGER DEFAULT 0,created_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS user_collectibles (uid TEXT NOT NULL,collectible_id TEXT NOT NULL,granted_by TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(uid,collectible_id))`,
     `CREATE TABLE IF NOT EXISTS trade_offers (id TEXT PRIMARY KEY,from_uid TEXT NOT NULL,to_uid TEXT NOT NULL,give_json TEXT NOT NULL,want_json TEXT NOT NULL,status TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
-    `CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_offers(to_uid,status,created_at)`
+    `CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_offers(to_uid,status,created_at)`,
+    `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -167,6 +168,19 @@ async function init() {
     ['one_of_one','ONE OF ONE','item','legendary','',1,0]
   ];
   for(const x of tradeItems) try{await db.execute({sql:'INSERT OR IGNORE INTO collectibles(id,name,type,rarity,value,staff_only,mod_grantable,created_at) VALUES(?,?,?,?,?,?,?,?)',args:[...x,now()]})}catch(e){}
+  for(const x of [
+['tag_comet','COMET','tag','common','',1,1],['tag_spark','SPARK','tag','common','',1,1],['tag_wanderer','WANDERER','tag','common','',1,1],['tag_wave','WAVE RIDER','tag','common','',1,1],['tag_builder','BUILDER','tag','common','',1,1],
+['tag_lucky','LUCKY','tag','uncommon','',1,1],['tag_orbit','ORBIT','tag','uncommon','',1,1],['tag_glitch','GLITCH','tag','uncommon','',1,1],['tag_sonic','SONIC','tag','uncommon','',1,1],['tag_blaze','BLAZE','tag','uncommon','',1,1],
+['tag_aurora','AURORA','tag','rare','',1,0],['tag_venom','VENOM','tag','rare','',1,0],['tag_nova','NOVA','tag','rare','',1,0],['tag_rift','RIFT WALKER','tag','rare','',1,0],['tag_crystal','CRYSTAL','tag','rare','',1,0],
+['tag_eclipse','ECLIPSE','tag','epic','',1,0],['tag_thunder','THUNDERBORN','tag','epic','',1,0],['tag_astral','ASTRAL','tag','epic','',1,0],['tag_abyss','ABYSS','tag','epic','',1,0],['tag_quantum','QUANTUM','tag','epic','',1,0],
+['tag_overlord','OVERLORD','tag','legendary','',1,0],['tag_starlord','STAR LORD','tag','legendary','',1,0],['tag_omega','OMEGA','tag','legendary','',1,0],['tag_infinite','INFINITE','tag','legendary','',1,0],['tag_voidking','VOID KING','tag','legendary','',1,0],
+['item_coin_pouch','Coin Pouch','item','common','',0,0],['item_apple','Golden Apple','item','common','',0,0],['item_shell','Lucky Shell','item','common','',0,0],['item_feather','Silver Feather','item','common','',0,0],['item_ticket','Mystery Ticket','item','common','',0,0],
+['item_neonfish','Neon Fish','item','uncommon','',0,0],['item_crate','Supply Crate','item','uncommon','',0,0],['item_orb','Energy Orb','item','uncommon','',0,0],['item_mask','Cyber Mask','item','uncommon','',0,0],['item_compass','Star Compass','item','uncommon','',0,0],
+['item_blade','Crystal Blade','item','rare','',0,0],['item_core','Fusion Core','item','rare','',0,0],['item_fox','Spirit Fox','item','rare','',0,0],['item_relic','Ancient Relic','item','rare','',0,0],['item_prism','Rainbow Prism','item','rare','',0,0],
+['item_wings','Nebula Wings','item','epic','',0,0],['item_crown_epic','Storm Crown','item','epic','',0,0],['item_portal','Pocket Portal','item','epic','',0,0],['item_phoenix','Phoenix Heart','item','epic','',0,0],['item_moon','Moonstone','item','epic','',0,0],
+['item_dragon_king','Dragon King Relic','item','legendary','',0,0],['item_time','Time Crystal','item','legendary','',0,0],['item_sun','Sun Core','item','legendary','',0,0],['item_celestial','Celestial Crown','item','legendary','',0,0],['item_felix','Felix Trophy','item','legendary','',0,0]
+]) try{await db.execute({sql:'INSERT OR IGNORE INTO collectibles(id,name,type,rarity,value,staff_only,mod_grantable,created_at) VALUES(?,?,?,?,?,?,?,?)',args:[...x,now()]})}catch(e){}
+
 
   // @felixchat automatically owns every collectible/tag. The DEVELOPER tag is exclusive.
   try {
@@ -537,6 +551,22 @@ app.delete('/api/admin/tags/:uid/:tagId',auth,async(req,res)=>{
   if(role==='mod' && Number(tag.mod_grantable||0)!==1)return res.status(403).json({error:'Mods can only remove approved smaller tags'});
   await db.execute({sql:`DELETE FROM user_collectibles WHERE uid=? AND collectible_id=?`,args:[req.params.uid,req.params.tagId]}); res.json({ok:true});
 });
+
+
+const QUESTS=[
+{id:'first_chat',name:'First Steps',description:'Send 10 messages',goal:10,reward:'tag_comet',kind:'messages'},
+{id:'social',name:'Social Butterfly',description:'Send 50 messages',goal:50,reward:'tag_lucky',kind:'messages'},
+{id:'story',name:'Story Maker',description:'Post 1 story',goal:1,reward:'item_neonfish',kind:'stories'},
+{id:'collector',name:'Collector',description:'Own 5 collectibles',goal:5,reward:'item_crystal',kind:'collectibles'},
+{id:'legend_path',name:'Legend Path',description:'Send 200 messages',goal:200,reward:'tag_nova',kind:'messages'}
+];
+async function questProgress(uid,q){
+ let sql=q.kind==='messages'?'SELECT COUNT(*) c FROM messages WHERE sender_id=?':q.kind==='stories'?'SELECT COUNT(*) c FROM stories WHERE uid=?':'SELECT COUNT(*) c FROM user_collectibles WHERE uid=?';
+ const r=await db.execute({sql,args:[uid]}); return Number(r.rows[0]?.c||0);
+}
+app.get('/api/quests',auth,async(req,res)=>{const out=[];for(const q of QUESTS){const progress=await questProgress(req.uid,q);const c=await db.execute({sql:'SELECT 1 FROM quest_claims WHERE uid=? AND quest_id=?',args:[req.uid,q.id]});out.push({...q,progress,claimed:!!c.rows[0]})}res.json(out)});
+app.post('/api/quests/:id/claim',auth,async(req,res)=>{const q=QUESTS.find(x=>x.id===req.params.id);if(!q)return res.status(404).json({error:'Quest not found'});const progress=await questProgress(req.uid,q);if(progress<q.goal)return res.status(400).json({error:'Quest not complete'});const old=await db.execute({sql:'SELECT 1 FROM quest_claims WHERE uid=? AND quest_id=?',args:[req.uid,q.id]});if(old.rows[0])return res.status(400).json({error:'Already claimed'});await db.batch([{sql:'INSERT INTO quest_claims(uid,quest_id,claimed_at) VALUES(?,?,?)',args:[req.uid,q.id,now()]},{sql:'INSERT OR IGNORE INTO user_collectibles(uid,collectible_id,granted_by,created_at) VALUES(?,?,?,?)',args:[req.uid,q.reward,'quest',now()]}]);res.json({ok:true,reward:q.reward})});
+app.post('/api/admin/grant-collectible',auth,async(req,res)=>{if(!await requireAdmin(req,res))return;const ids=Array.isArray(req.body.uids)?req.body.uids:[];const cid=String(req.body.collectibleId||'');const c=await db.execute({sql:'SELECT id FROM collectibles WHERE id=?',args:[cid]});if(!c.rows[0])return res.status(404).json({error:'Item not found'});for(const uid of ids){await db.execute({sql:'INSERT OR IGNORE INTO user_collectibles(uid,collectible_id,granted_by,created_at) VALUES(?,?,?,?)',args:[uid,cid,req.uid,now()]});broadcast(uid,{type:'collectible_granted',collectibleId:cid})}res.json({ok:true,count:ids.length})});
 
 app.post('/api/admin/ban/:uid',auth,async(req,res)=>{
   if(!await requireModerator(req,res))return;
