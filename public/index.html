@@ -4373,3 +4373,26 @@ async function acceptTrade(id){try{await api('/trades/'+id+'/accept',{method:'PO
 async function declineTrade(id){try{await api('/trades/'+id+'/decline',{method:'POST'});viewTradeRequests()}catch(e){alert(e.message)}}
 window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window.sendTrade=sendTrade;window.viewTradeRequests=viewTradeRequests;window.acceptTrade=acceptTrade;window.declineTrade=declineTrade;
 </script>
+<script>
+/* Profile inventory + equipped tag display (additive). */
+(function(){
+ const rarityClass=r=>String(r||'Common').toLowerCase().replace(/[^a-z]/g,'');
+ window.userLabel=function(u){
+   const base=escapeHtml(u.displayName||u.username||'User');
+   const tags=(u.tags||[]).slice(0,5).map(t=>`<span class="felix-tag ${rarityClass(t.rarity)}" title="${escapeHtml(t.rarity||'Tag')}">${escapeHtml(t.name)}</span>`).join('');
+   return `${base} ${tags}`;
+ };
+ const oldProfile=window.openUserProfile;
+ window.openUserProfile=async function(uid){
+   try{
+    const u=await api('/users/'+encodeURIComponent(uid));
+    let inv={items:[]}; try{inv=await api('/collectibles/'+encodeURIComponent(uid));}catch(_){}
+    const tags=(inv.items||[]).filter(x=>x.type==='tag'); const other=(inv.items||[]).filter(x=>x.type!=='tag');
+    const chips=a=>a.length?a.map(x=>`<span class="felix-tag ${rarityClass(x.rarity)}">${escapeHtml(x.name)}</span>`).join(' '):'<span class="small">None yet</span>';
+    const html=`<div class="profile-screen"><button class="profile-screen-close" onclick="closeModal()">×</button><div class="profile-screen-main"><div class="profile-screen-avatar">${avatarMarkup(u)}</div><h2>${userLabel(u)}</h2><div class="profile-screen-handle">@${escapeHtml(u.username)}</div><section class="profile-screen-panel"><h3>ABOUT ME</h3><div>${escapeHtml(u.bio||'No bio yet.')}</div><h3 style="margin-top:18px">🏷️ ALL TAGS</h3><div class="small" style="margin-bottom:8px">All tags this user owns</div><div class="felix-tag-list">${chips(tags)}</div></section><section class="profile-screen-panel"><h3>🎒 ITEMS OWNED</h3><div class="felix-tag-list">${chips(other)}</div></section></div></div>`;
+    openModal(html); document.getElementById('modal')?.classList.add('profile-fullscreen-modal');
+   }catch(e){alert(e.message)}
+ };
+ const style=document.createElement('style');style.textContent=`.felix-tag{display:inline-block;margin:2px 3px 2px 0;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#273043;border:1px solid rgba(255,255,255,.18);vertical-align:middle}.felix-tag.common{opacity:.8}.felix-tag.uncommon{box-shadow:0 0 8px #35b76a}.felix-tag.rare{box-shadow:0 0 9px #3388ff}.felix-tag.epic{box-shadow:0 0 10px #a855f7}.felix-tag.legendary{box-shadow:0 0 12px #f5b942}.felix-tag.mythic{box-shadow:0 0 14px #ff4fd8}.felix-tag-list{line-height:2.2}`;document.head.appendChild(style);
+})();
+</script>
