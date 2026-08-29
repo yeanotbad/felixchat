@@ -1653,6 +1653,7 @@ class="friends"
     <button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">Mod Tools</button>
     <button class="btn" onclick="openQuickAdd()">Quick Add</button>
     <button class="btn" onclick="openTradeCenter()">🔄 Trade</button>
+    <button class="btn" onclick="openFelixShop()">🛒 Felix Shop</button>
     <button class="btn" onclick="openQuests()">🎯 Quests</button>
   </div>
 </div>
@@ -4386,9 +4387,15 @@ async function openTradeWith(uid,name){
  }catch(e){alert(e.message)}
 }
 async function sendTrade(uid){try{const give=[...document.querySelectorAll('.trade-give:checked')].map(x=>x.value),want=[...document.querySelectorAll('.trade-want:checked')].map(x=>x.value);await api('/trades',{method:'POST',body:JSON.stringify({toUid:uid,give,want})});alert('Trade request sent!');closeModal()}catch(e){alert(e.message)}}
-async function viewTradeRequests(){try{const r=await api('/trades');const pending=r.trades.filter(t=>t.status==='pending');openModal('<h2>📨 Trade requests</h2>'+ (pending.map(t=>`<div class="request"><b>Trade request</b><p class="small">From: ${escapeHtml(t.from_uid)}</p>${t.to_uid===me?.uid?`<button class="btn primary" onclick="acceptTrade('${t.id}')">Accept</button> <button class="btn" onclick="declineTrade('${t.id}')">Decline</button>`:'<span class="small">Waiting for friend</span>'}</div>`).join('')||'<p class="small">No pending trades.</p>'))}catch(e){alert(e.message)}}
+async function viewTradeRequests(){try{const [r,c]=await Promise.all([api('/trades'),api('/collectibles')]);const map=new Map((c.items||[]).map(x=>[x.id,x.name]));const pending=(r.trades||[]).filter(t=>t.status==='pending');const names=a=>{try{return JSON.parse(a||'[]').map(id=>map.get(id)||id).join(', ')||'Nothing'}catch(e){return 'Nothing'}};openModal('<h2>📨 Trade requests</h2>'+ (pending.map(t=>`<div class="trade-panel"><b>🔄 Trade request</b><p class="small">From: ${escapeHtml(t.from_uid)}</p><p><b>📦 They offer:</b><br>${escapeHtml(names(t.give_json))}</p><p><b>🎁 They want:</b><br>${escapeHtml(names(t.want_json))}</p>${t.to_uid===me?.uid?`<button class="btn primary" onclick="acceptTrade('${t.id}')">Accept</button> <button class="btn" onclick="declineTrade('${t.id}')">Decline</button>`:'<span class="small">Waiting for friend</span>'}</div>`).join('')||'<p class="small">No pending trades.</p>'))}catch(e){alert(e.message)}}
 async function acceptTrade(id){try{await api('/trades/'+id+'/accept',{method:'POST'});alert('Trade completed!');viewTradeRequests()}catch(e){alert(e.message)}}
 async function declineTrade(id){try{await api('/trades/'+id+'/decline',{method:'POST'});viewTradeRequests()}catch(e){alert(e.message)}}
+
+async function openFelixShop(){try{const r=await api('/shop');const cls=x=>'rarity-'+String(x.rarity||'common').toLowerCase();openModal(`<div class="trade-clean-head"><h2>🛒 Felix Shop</h2><span class="rarity-chip">${r.day}</span></div><div class="trade-user">💰 <b>${r.bucks.toLocaleString()} Felix Bucks</b><br><span class="small">Earn 1 Felix Buck for every message you send. The shop has 5 items and refreshes daily.</span></div><div class="trade-scroll">${r.items.map(x=>`<div class="trade-item ${cls(x)}"><div class="trade-item-main"><div class="trade-item-name">${escapeHtml(x.name)}</div><div class="rarity-chip">${escapeHtml(x.rarity)} • 💰 ${Number(x.price).toLocaleString()}</div></div><button class="btn primary" onclick="buyShopItem('${x.id}')">Buy</button></div>`).join('')}</div>`)}catch(e){alert(e.message)}}
+async function buyShopItem(id){try{const r=await api('/shop/buy/'+id,{method:'POST'});alert('Bought! You now have '+r.bucks+' Felix Bucks.');openFelixShop()}catch(e){alert(e.message)}}
+
+window.openFelixShop=openFelixShop;
+window.buyShopItem=buyShopItem;
 window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window.sendTrade=sendTrade;window.viewTradeRequests=viewTradeRequests;window.acceptTrade=acceptTrade;window.declineTrade=declineTrade;
 </script>
 <script>
