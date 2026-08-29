@@ -4220,6 +4220,7 @@ window.createFeatureGroup=createGroupWizard;
   <button onclick="mobileGo('requests')">👥 Friends</button>
   <button onclick="mobileGo('groups')">👨‍👩‍👧 Groups</button>
   <button onclick="mobileGo('menu')">☰ Menu</button>
+  <button onclick="openTradeCenter()">🔄 Trade</button>
 </div>
 <script>
 (function(){
@@ -4351,4 +4352,23 @@ body.felix-ios-chat-open #messageInput{font-size:16px!important}
   document.addEventListener('touchstart',function(e){if(document.body.classList.contains('felix-ios-chat-open')){var t=e.touches[0];startX=t.clientX;startY=t.clientY;}},{passive:true});
   document.addEventListener('touchend',function(e){if(!document.body.classList.contains('felix-ios-chat-open'))return;var t=e.changedTouches[0];var dx=t.clientX-startX,dy=t.clientY-startY;if(startX<28&&dx>90&&Math.abs(dx)>Math.abs(dy)*1.5)closeConversation();},{passive:true});
 })();
+</script>
+<script>
+// Felix Chat Trade UI: menu shortcut is intentionally lightweight and uses the existing modal system.
+async function openTradeCenter(){
+ try{
+  const friends=await api('/friends');
+  openModal('<h2>🔄 Trade</h2><p class="small">Choose a friend to view both inventories and send an offer.</p><div>'+friends.map(f=>`<button class="request" style="width:100%;text-align:left" onclick="openTradeWith('${f.uid}','${String(f.username||'').replace(/'/g,"\\'")}')">🔄 @${escapeHtml(f.username||f.displayName)}</button>`).join('')+'</div><hr><button class="btn" onclick="viewTradeRequests()">📨 Trade requests</button>');
+ }catch(e){alert(e.message)}
+}
+async function openTradeWith(uid,name){
+ try{const [mine,theirs]=await Promise.all([api('/trades/inventory'),api('/trades/inventory/'+uid)]); const pick=(items,side)=>items.map(x=>`<label class="request"><input type="checkbox" class="trade-${side}" value="${escapeHtml(x.id)}"> <b>${escapeHtml(x.name)}</b> <span class="small">${escapeHtml(x.rarity||'')}</span></label>`).join('')||'<p class="small">No tradable items.</p>';
+ openModal(`<h2>🔄 Trade with @${escapeHtml(name)}</h2><h3>You give</h3>${pick(mine.items,'give')}<h3>You get</h3>${pick(theirs.items,'want')}<button class="btn primary" onclick="sendTrade('${uid}')">Send trade request</button>`);
+ }catch(e){alert(e.message)}
+}
+async function sendTrade(uid){try{const give=[...document.querySelectorAll('.trade-give:checked')].map(x=>x.value),want=[...document.querySelectorAll('.trade-want:checked')].map(x=>x.value);await api('/trades',{method:'POST',body:JSON.stringify({toUid:uid,give,want})});alert('Trade request sent!');closeModal()}catch(e){alert(e.message)}}
+async function viewTradeRequests(){try{const r=await api('/trades');const pending=r.trades.filter(t=>t.status==='pending');openModal('<h2>📨 Trade requests</h2>'+ (pending.map(t=>`<div class="request"><b>Trade request</b><p class="small">From: ${escapeHtml(t.from_uid)}</p>${t.to_uid===me?.uid?`<button class="btn primary" onclick="acceptTrade('${t.id}')">Accept</button> <button class="btn" onclick="declineTrade('${t.id}')">Decline</button>`:'<span class="small">Waiting for friend</span>'}</div>`).join('')||'<p class="small">No pending trades.</p>'))}catch(e){alert(e.message)}}
+async function acceptTrade(id){try{await api('/trades/'+id+'/accept',{method:'POST'});alert('Trade completed!');viewTradeRequests()}catch(e){alert(e.message)}}
+async function declineTrade(id){try{await api('/trades/'+id+'/decline',{method:'POST'});viewTradeRequests()}catch(e){alert(e.message)}}
+window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window.sendTrade=sendTrade;window.viewTradeRequests=viewTradeRequests;window.acceptTrade=acceptTrade;window.declineTrade=declineTrade;
 </script>
