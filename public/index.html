@@ -1419,6 +1419,12 @@ button:focus-visible,input:focus-visible{
  }
  setInterval(splitOptions,500);
 })();
+
+async function openQuests(){try{const qs=await api('/quests');openModal('<h2>🎯 Quests</h2><p class="small">Complete quests to earn exclusive tags and items.</p>'+qs.map(q=>{const done=q.progress>=q.goal;return `<div class="request"><b>${escapeHtml(q.name)}</b><div class="small">${escapeHtml(q.description)} — ${q.progress}/${q.goal}</div><button class="btn ${done&&!q.claimed?'primary':''}" ${done&&!q.claimed?`onclick="claimQuest('${q.id}')"`:''}>${q.claimed?'✓ Claimed':done?'Claim reward':'In progress'}</button></div>`}).join(''))}catch(e){alert(e.message)}}
+async function claimQuest(id){try{await api('/quests/'+id+'/claim',{method:'POST'});await openQuests();alert('Quest reward claimed!')}catch(e){alert(e.message)}}
+async function openBulkGrant(){try{const [users,catalog]=await Promise.all([api('/admin/users'),api('/admin/tags/catalog')]);const items=await api('/trades/inventory');const all=[...catalog,...items];openModal(`<h2>🎁 Bulk Grant</h2><p class="small">Select multiple players, then choose a tag or item.</p><input class="input" id="bulkSearch" placeholder="Search players..." oninput="filterBulkUsers()"><div id="bulkUsers" style="max-height:280px;overflow:auto">${users.map(u=>`<label class="request"><input type="checkbox" class="bulk-user" value="${u.uid}"> @${escapeHtml(u.username)}</label>`).join('')}</div><select id="bulkItem" class="input">${all.map(i=>`<option value="${i.id}">${escapeHtml(i.name)} — ${escapeHtml(i.rarity||'')}</option>`).join('')}</select><button class="btn primary" onclick="sendBulkGrant()">Give to selected players</button></div>`)}catch(e){alert(e.message)}}
+function filterBulkUsers(){const q=String($('bulkSearch')?.value||'').toLowerCase();document.querySelectorAll('#bulkUsers label').forEach(el=>el.style.display=el.textContent.toLowerCase().includes(q)?'':'none')}
+async function sendBulkGrant(){const uids=[...document.querySelectorAll('.bulk-user:checked')].map(x=>x.value);if(!uids.length)return alert('Select at least one player');try{const r=await api('/admin/grant-collectible',{method:'POST',body:JSON.stringify({uids,collectibleId:$('bulkItem').value})});alert('Granted to '+r.count+' player(s)');closeModal()}catch(e){alert(e.message)}}
 </script>
 
 
@@ -1647,6 +1653,7 @@ class="friends"
     <button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">Mod Tools</button>
     <button class="btn" onclick="openQuickAdd()">Quick Add</button>
     <button class="btn" onclick="openTradeCenter()">🔄 Trade</button>
+    <button class="btn" onclick="openQuests()">🎯 Quests</button>
   </div>
 </div>
 <label class="snap-toggle"><input id="disappearingToggle" type="checkbox"> Disappearing messages (24h)</label>
@@ -2971,7 +2978,7 @@ async function openAdminPanel(){
   try{
     const status=await api('/admin/status');
     if(!status.admin)return alert('Admin access required');
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="openServerStatusPanel()" style="margin-top:8px;width:100%">Server Status</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="openBulkGrant()" style="margin-top:8px;width:100%">🎁 Grant Tags / Items</button><button class="btn" onclick="openServerStatusPanel()" style="margin-top:8px;width:100%">Server Status</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
