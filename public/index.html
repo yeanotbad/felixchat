@@ -1653,9 +1653,6 @@ class="friends"
     <button id="modBtn" class="btn" style="display:none" onclick="openModPanel()">Mod Tools</button>
     <button class="btn" onclick="openQuickAdd()">Quick Add</button>
     <button class="btn" onclick="openTradeCenter()">🔄 Trade</button>
-    <button class="btn" onclick="openFelixShop()">🛒 Felix Shop</button>
-    <button class="btn" onclick="openFelixGames()">🎮 Felix Games</button>
-    <button class="btn" onclick="openSendBucks()">💸 Send Felix Bucks</button>
     <button class="btn" onclick="openQuests()">🎯 Quests</button>
   </div>
 </div>
@@ -4066,14 +4063,6 @@ window.createFeatureGroup=createGroupWizard;
 
 <!-- Removed the floating side shortcut symbols. Features remain accessible through normal menus and / commands. -->
 
-
-<script>
-async function openFelixGames(){try{const r=await api('/games');const names={quicktap:'⚡ Quick Tap',reaction:'🎯 Reaction Test',memory:'🧩 Memory Challenge',trivia:'🧠 Trivia Challenge'};openModal(`<div class="trade-clean-head"><h2>🎮 Felix Games</h2><span class="rarity-chip">💰 ${Number(r.bucks||0).toLocaleString()} Bucks</span></div><p class="small">Win skill challenges to earn Felix Bucks. Rewards increase with difficulty.</p><div class="trade-scroll">${r.games.map(g=>`<div class="trade-item"><div class="trade-item-main"><div class="trade-item-name">${names[g.id]}</div><div class="rarity-chip">Win up to 💰 ${g.reward}</div></div><button class="btn primary" onclick="playFelixGame('${g.id}')">Play</button></div>`).join('')}</div>`)}catch(e){alert(e.message)}}
-async function playFelixGame(id){let ok=false;if(id==='quicktap'){ok=confirm('Quick Tap: press OK as fast as you can!')}else if(id==='reaction'){alert('Reaction challenge: get ready!');await new Promise(r=>setTimeout(r,800+Math.random()*2200));ok=confirm('NOW! Tap OK quickly to win!')}else if(id==='memory'){const seq=Math.floor(1000+Math.random()*8999);ok=prompt('Memory Challenge: remember this number: '+seq+'\nEnter it below:')===String(seq)}else {const qs=[['What is 7 + 8?','15'],['What planet do we live on?','earth'],['How many days are in a week?','7']];const q=qs[Math.floor(Math.random()*qs.length)];ok=String(prompt(q[0])||'').trim().toLowerCase()===q[1]}if(!ok)return alert('Not this time! Try again later.');try{const r=await api('/games/reward',{method:'POST',body:{id}});alert('🎉 You won '+r.reward+' Felix Bucks! Balance: '+r.bucks);openFelixGames()}catch(e){alert(e.message)}}
-async function openSendBucks(){try{const friends=await api('/friends');openModal(`<div class="trade-clean-head"><h2>💸 Send Felix Bucks</h2></div><p class="small">Send Felix Bucks safely to one of your friends.</p><div class="trade-scroll">${friends.map(f=>`<div class="trade-item"><div class="trade-item-main"><div class="trade-item-name">${escapeHtml(f.username)}</div></div><button class="btn primary" onclick="sendBucksTo('${f.uid}','${escapeHtml(f.username).replace(/'/g,'')}')">Send</button></div>`).join('')||'<p>No friends yet.</p>'}</div>`)}catch(e){alert(e.message)}}
-async function sendBucksTo(uid,name){const amount=Number(prompt('How many Felix Bucks do you want to send to '+name+'?'));if(!Number.isFinite(amount)||amount<1)return;try{const r=await api('/bucks/send',{method:'POST',body:{uid,amount}});alert('Sent '+amount+' Felix Bucks! Remaining: '+r.bucks);openSendBucks()}catch(e){alert(e.message)}}
-window.openFelixGames=openFelixGames;window.playFelixGame=playFelixGame;window.openSendBucks=openSendBucks;window.sendBucksTo=sendBucksTo;
-</script>
 </body>
 
 <style>
@@ -4397,15 +4386,9 @@ async function openTradeWith(uid,name){
  }catch(e){alert(e.message)}
 }
 async function sendTrade(uid){try{const give=[...document.querySelectorAll('.trade-give:checked')].map(x=>x.value),want=[...document.querySelectorAll('.trade-want:checked')].map(x=>x.value);await api('/trades',{method:'POST',body:JSON.stringify({toUid:uid,give,want})});alert('Trade request sent!');closeModal()}catch(e){alert(e.message)}}
-async function viewTradeRequests(){try{const [r,c]=await Promise.all([api('/trades'),api('/collectibles')]);const map=new Map((c.items||[]).map(x=>[x.id,x.name]));const pending=(r.trades||[]).filter(t=>t.status==='pending');const names=a=>{try{return JSON.parse(a||'[]').map(id=>map.get(id)||id).join(', ')||'Nothing'}catch(e){return 'Nothing'}};openModal('<h2>📨 Trade requests</h2>'+ (pending.map(t=>`<div class="trade-panel"><b>🔄 Trade request</b><p class="small">From: ${escapeHtml(t.from_uid)}</p><p><b>📦 They offer:</b><br>${escapeHtml(names(t.give_json))}</p><p><b>🎁 They want:</b><br>${escapeHtml(names(t.want_json))}</p>${t.to_uid===me?.uid?`<button class="btn primary" onclick="acceptTrade('${t.id}')">Accept</button> <button class="btn" onclick="declineTrade('${t.id}')">Decline</button>`:'<span class="small">Waiting for friend</span>'}</div>`).join('')||'<p class="small">No pending trades.</p>'))}catch(e){alert(e.message)}}
+async function viewTradeRequests(){try{const r=await api('/trades');const pending=r.trades.filter(t=>t.status==='pending');openModal('<h2>📨 Trade requests</h2>'+ (pending.map(t=>`<div class="request"><b>Trade request</b><p class="small">From: ${escapeHtml(t.from_uid)}</p>${t.to_uid===me?.uid?`<button class="btn primary" onclick="acceptTrade('${t.id}')">Accept</button> <button class="btn" onclick="declineTrade('${t.id}')">Decline</button>`:'<span class="small">Waiting for friend</span>'}</div>`).join('')||'<p class="small">No pending trades.</p>'))}catch(e){alert(e.message)}}
 async function acceptTrade(id){try{await api('/trades/'+id+'/accept',{method:'POST'});alert('Trade completed!');viewTradeRequests()}catch(e){alert(e.message)}}
 async function declineTrade(id){try{await api('/trades/'+id+'/decline',{method:'POST'});viewTradeRequests()}catch(e){alert(e.message)}}
-
-async function openFelixShop(){try{const r=await api('/shop');const cls=x=>'rarity-'+String(x.rarity||'common').toLowerCase();openModal(`<div class="trade-clean-head"><h2>🛒 Felix Shop</h2><span class="rarity-chip">${r.day}</span></div><div class="trade-user">💰 <b>${r.bucks.toLocaleString()} Felix Bucks</b><br><span class="small">Earn 1 Felix Buck for every message you send. The shop has 5 items and refreshes daily.</span></div><div class="trade-scroll">${r.items.map(x=>`<div class="trade-item ${cls(x)}"><div class="trade-item-main"><div class="trade-item-name">${escapeHtml(x.name)}</div><div class="rarity-chip">${escapeHtml(x.rarity)} • 💰 ${Number(x.price).toLocaleString()}</div></div><button class="btn primary" onclick="buyShopItem('${x.id}')">Buy</button></div>`).join('')}</div>`)}catch(e){alert(e.message)}}
-async function buyShopItem(id){try{const r=await api('/shop/buy/'+id,{method:'POST'});alert('Bought! You now have '+r.bucks+' Felix Bucks.');openFelixShop()}catch(e){alert(e.message)}}
-
-window.openFelixShop=openFelixShop;
-window.buyShopItem=buyShopItem;
 window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window.sendTrade=sendTrade;window.viewTradeRequests=viewTradeRequests;window.acceptTrade=acceptTrade;window.declineTrade=declineTrade;
 </script>
 <script>
