@@ -10,6 +10,19 @@ const webpush = require('web-push');
 
 const PORT = process.env.PORT || 3000;
 const app = express();
+const registrationRate = new Map();
+function clientIp(req){ return String(req.headers['x-forwarded-for']||req.socket?.remoteAddress||'unknown').split(',')[0].trim(); }
+function checkRegistrationRate(req){
+  const ip=clientIp(req), t=Date.now(), windowMs=60*60*1000;
+  let r=registrationRate.get(ip);
+  if(!r || t-r.start>windowMs) r={start:t,count:0};
+  r.count++;
+  registrationRate.set(ip,r);
+  return r.count<=5; // max 5 signup attempts per IP per hour
+}
+setInterval(()=>{const t=Date.now(); for(const [ip,r] of registrationRate) if(t-r.start>60*60*1000) registrationRate.delete(ip);},10*60*1000).unref?.();
+
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 const UPLOADS = path.join(__dirname, 'public', 'uploads');
@@ -370,6 +383,9 @@ async function sendVerificationEmail(email, code){
 
 app.post('/api/register', async (req,res)=>{
   try {
+    if(!checkRegistrationRate(req)) return res.status(429).json({error:'Too many signup attempts. Please try again later.'});
+    // Refuse registration if the database/server is unavailable, preventing partial accounts.
+    await db.execute('SELECT 1');
     const username=clean(req.body.username).toLowerCase();
     const email=String(req.body.email||'').trim().toLowerCase();
     const password=String(req.body.password||'');
