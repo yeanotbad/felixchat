@@ -1914,50 +1914,17 @@ Log In
 
 
 async function register(){
-
 try{
-
-const data =
-await api(
-"/register",
-{
-method:"POST",
-body:JSON.stringify({
-
-username:
-$("username").value,
-
-email:
-$("email").value,
-
-password:
-$("password").value
-
-})
+const data=await api("/register",{method:"POST",body:JSON.stringify({username:$("username").value,email:$("email").value,password:$("password").value})});
+if(data.needsVerification){
+const email=$("email").value.trim();
+openModal(`<h2>📧 Verify your email</h2><p>We sent a 6-digit code to <b>${email}</b>.</p><input id="verifyCode" class="input" inputmode="numeric" maxlength="6" placeholder="6-digit code"><br><br><button class="btn primary" onclick="verifyEmailCode('${email.replace(/'/g,"\'")}')">Verify Email</button> <button class="btn" onclick="resendEmailCode('${email.replace(/'/g,"\'")}')">Resend Code</button>`);
 }
-);
-
-token =
-data.token;
-
-localStorage.setItem(
-"felix_token",
-token
-);
-
-closeModal();
-
-loadUser().then(()=>showDeviceChoiceIfNeeded());
-
+}catch(error){alert(error.message);}
 }
+async function verifyEmailCode(email){try{const data=await api('/verify-email',{method:'POST',body:JSON.stringify({email,code:$("verifyCode").value})});token=data.token;localStorage.setItem('felix_token',token);closeModal();loadUser().then(()=>showDeviceChoiceIfNeeded());}catch(error){alert(error.message);}}
+async function resendEmailCode(email){try{await api('/resend-verification',{method:'POST',body:JSON.stringify({email})});alert('A new verification code was sent.');}catch(error){alert(error.message);}}
 
-catch(error){
-
-alert(error.message);
-
-}
-
-}
 
 
 async function login(){
@@ -4502,3 +4469,5 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
   };
 })();
 </script>
+
+<style>@media(max-width:700px){#friendsList,.friends-list,.friendsPanel{max-height:calc(100vh - 130px)!important;height:calc(100vh - 130px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;}}</style>
