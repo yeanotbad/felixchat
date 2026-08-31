@@ -1869,7 +1869,16 @@ openModal(`
 <input
 id="username"
 class="input"
-placeholder="Username"
+placeholder="Username or Email"
+/>
+
+<br><br>
+
+<input
+id="email"
+class="input"
+type="email"
+placeholder="Email (required to create an account)"
 />
 
 <br><br>
@@ -1917,6 +1926,9 @@ body:JSON.stringify({
 
 username:
 $("username").value,
+
+email:
+$("email").value,
 
 password:
 $("password").value
@@ -4463,5 +4475,30 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
 
   // Re-render after load so the friends menu always gets collectible tags.
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>window.renderFriends&&window.renderFriends(),300));
+})();
+</script>
+<style>
+@media (max-width: 700px){
+  #friends{overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;max-height:calc(100vh - 150px)!important;height:auto!important;min-height:0!important;padding-bottom:24px!important;}
+  .sidebar{height:100dvh!important;min-height:0!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;}
+  .sidebar #friends{flex:1 1 auto!important;}
+}
+</style>
+<script>
+(function(){
+  window.showNotifications=async function(){
+    try{
+      const notes=await api('/notifications/unread');
+      let box=document.getElementById('felixNotificationModal');
+      if(!box){box=document.createElement('div');box.id='felixNotificationModal';box.className='modal-overlay';document.body.appendChild(box);}
+      box.innerHTML='<div class="modal" style="max-width:520px"><div class="modal-header"><h2>🔔 Notifications</h2><button class="close-btn" onclick="document.getElementById(\'felixNotificationModal\').remove()">×</button></div><div class="notification-list">'+(notes.length?notes.map(n=>`<div class="notification-item" data-uid="${escapeHtml(n.uid)}"><b>@${escapeHtml(n.username)}</b><div class="small">${escapeHtml(n.text||'Sent you a message')}</div></div>`).join(''):'<div class="small" style="padding:16px">No new notifications.</div>')+'</div></div>';
+      box.querySelectorAll('.notification-item[data-uid]').forEach(el=>el.onclick=async()=>{
+        const uid=el.dataset.uid;
+        const friend=(me.friends||[]).find(f=>String(f.uid)===String(uid));
+        if(friend){box.remove();await selectFriend(friend);}
+      });
+      box.onclick=e=>{if(e.target===box)box.remove();};
+    }catch(e){alert('Could not load notifications: '+(e.message||'Something went wrong'));}
+  };
 })();
 </script>
