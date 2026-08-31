@@ -337,6 +337,14 @@ function broadcast(uid, payload) {
   for (const ws of set) if (ws.readyState === WebSocket.OPEN) ws.send(data);
 }
 function pair(a,b,payload){ broadcast(a,payload); broadcast(b,payload); }
+
+async function equippedTagsFor(uid){
+  try{
+    const r=await db.execute({sql:`SELECT c.id,c.name,c.rarity,c.value FROM equipped_tags e JOIN collectibles c ON c.id=e.collectible_id WHERE e.uid=? ORDER BY e.position LIMIT 5`,args:[uid]});
+    return r.rows||[];
+  }catch(_){ return []; }
+}
+
 function publicUser(u, online=false){
   return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', verified:Number(u.verified||0)===1, online, lastSeen:u.last_seen || 0, streak:u.streak || 0, timeoutUntil:Number(u.timeout_until||0), timeoutBy:u.timeout_by || '' };
 }
@@ -385,7 +393,7 @@ app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
-  const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
+  const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(x.uid); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
   res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',friends,requests:incoming.rows.map(x=>publicUser(x))});
 });
 
@@ -443,7 +451,7 @@ app.post('/api/profile/avatar',auth,async(req,res)=>{
 
 app.get('/api/friends',auth,async(req,res)=>{
   const r=await db.execute({sql:`SELECT u.* FROM friendships f JOIN users u ON u.uid=f.friend_id WHERE f.user_id=? AND f.status='accepted' ORDER BY lower(u.username)`,args:[req.uid]});
-  const out=r.rows.map(u=>publicUser(u,(sockets.get(u.uid)?.size||0)>0));
+  const out=[]; for(const u of r.rows){const f=publicUser(u,(sockets.get(u.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(u.uid); out.push(f);}
   res.json(out);
 });
 
