@@ -1368,6 +1368,9 @@ button:focus-visible,input:focus-visible{
  .modal-box{max-width:100%!important;max-height:calc(100dvh - 16px)!important;overflow:auto;}
  img,video{max-width:100%;}
 }
+
+/* Equipped collectible tags belong in the Friends menu, not inside chat message bubbles. */
+.friend-info{min-width:0;flex:1}.friend-name-row{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.friend-official-badges{display:inline-flex;gap:3px;align-items:center}.friend-equipped-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;max-width:100%;overflow:hidden}.friend-equipped-tags .felix-tag{margin:0;font-size:10px;line-height:1.2;white-space:nowrap}.message-sender .felix-tag,.message .felix-tag{display:none!important}
 </style>
 
 <style id="felix-layout-upgrade">
@@ -2105,9 +2108,10 @@ element.innerHTML = `
 
 <div class="friend-info">
 
-<b class="profile-link">
-@${friend.username}${friend.verified ? '<span class="verified-tick">✓</span>' : ''}${Number(friend.streak||0)>0 ? `<span class="streak-badge active">🔥 ${Number(friend.streak)}</span>` : ''}
+<b class="profile-link friend-name-row">
+@${escapeHtml(friend.username)}<span class="friend-official-badges">${roleBadgeHTML(friend.role,friend.username,friend.verified)}</span>${Number(friend.streak||0)>0 ? `<span class="streak-badge active">🔥 ${Number(friend.streak)}</span>` : ''}
 </b>
+<div class="friend-equipped-tags">${(friend.equippedTags||[]).slice(0,5).map(t=>`<span class="felix-tag ${rarityClass(t.rarity)}">${escapeHtml(t.name)}</span>`).join('')}</div>
 
 <div class="small">
 
@@ -4409,27 +4413,49 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
  const style=document.createElement('style');style.textContent=`.felix-tag{display:inline-block;margin:2px 3px 2px 0;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#273043;border:1px solid rgba(255,255,255,.18);vertical-align:middle}.equipped-top{margin:4px 0 8px}.owned-tag{margin:4px;padding:6px 9px;border-radius:999px;border:1px solid #43506a;background:#202a3d;color:#fff;cursor:pointer}.owned-tag:hover{transform:translateY(-1px);filter:brightness(1.25)}.owned-tag.equipped{outline:2px solid #fff;box-shadow:0 0 10px #fff}.felix-tag.uncommon,.owned-tag.uncommon{box-shadow:0 0 8px #35b76a}.felix-tag.rare,.owned-tag.rare{box-shadow:0 0 9px #3388ff}.felix-tag.epic,.owned-tag.epic{box-shadow:0 0 10px #a855f7}.felix-tag.legendary,.owned-tag.legendary{box-shadow:0 0 12px #f5b942}.felix-tag.mythic,.owned-tag.mythic{box-shadow:0 0 14px #ff4fd8}.felix-tag-list{line-height:2.2}`;document.head.appendChild(style);
 })();
 </script>
+
+<!-- Official badges in chat/header; collectible tags only in friends/profile -->
 <style>
-/* Equipped collectible tags: kept separate from official badges and wrap cleanly */
-.equipped-tags{display:flex!important;flex-wrap:wrap!important;gap:4px!important;align-items:center!important;margin-top:4px;max-width:100%;white-space:normal!important;overflow:visible!important}
-.equipped-tag{display:inline-flex;align-items:center;min-height:18px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;line-height:1.1;border:1px solid currentColor;background:rgba(255,255,255,.08);white-space:nowrap}
-.equipped-tag.common{color:#b9bec7}.equipped-tag.uncommon{color:#49d17d}.equipped-tag.rare{color:#4da3ff}.equipped-tag.epic{color:#b86cff}.equipped-tag.legendary{color:#f4c34f}.equipped-tag.mythic{color:#ff70b7}
-.friend-info .official-badges{display:inline-flex;gap:4px;flex-wrap:wrap;vertical-align:middle;margin-left:4px}.message-sender{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.message-sender .equipped-tags{width:100%;margin:0 0 2px}
-@media(max-width:700px){.equipped-tag{font-size:9px;padding:2px 6px}.friend-info b{white-space:normal!important}}
+.felix-equipped-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;max-width:100%}
+.felix-equipped-tags .felix-tag{white-space:nowrap;display:inline-flex;align-items:center}
+.friend-info .official-badges{display:inline-flex;gap:4px;flex-wrap:wrap;vertical-align:middle}
 </style>
 <script>
-/* Global equipped-tag display patch. Official Verified/Dev/VIP badges stay separate. */
 (function(){
- const tagCache=new Map();
- function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
- async function tagsFor(uid){if(!uid)return[];if(tagCache.has(uid))return tagCache.get(uid);try{const r=await api('/collectibles/'+encodeURIComponent(uid)+'/equipped');const t=Array.isArray(r?.tags)?r.tags:[];tagCache.set(uid,t);return t;}catch(e){return[]}}
- function tagHTML(tags){if(!tags?.length)return'';return '<div class="equipped-tags">'+tags.slice(0,5).map(t=>'<span class="equipped-tag '+esc(String(t.rarity||'common').toLowerCase())+'">'+esc(t.name)+'</span>').join('')+'</div>'}
- async function decorateFriendTags(){const list=me?.friends||[];const els=[...document.querySelectorAll('#friends .friend:not(.group-friend)')];await Promise.all(list.map(async(f,i)=>{const el=els[i];if(!el)return;const info=el.querySelector('.friend-info');if(!info)return;const old=info.querySelector('.equipped-tags');if(old)old.remove();const tags=await tagsFor(f.uid);if(tags.length)info.insertAdjacentHTML('beforeend',tagHTML(tags));}));}
- const oldRender=window.renderFriends;
- window.renderFriends=function(){const r=oldRender?oldRender.apply(this,arguments):undefined;setTimeout(decorateFriendTags,0);return r;};
- window.addEventListener('load',()=>setTimeout(decorateFriendTags,800));
- const oldBubble=window.messageBubble;
- if(oldBubble){window.messageBubble=function(message){const bubble=oldBubble(message);setTimeout(async()=>{const uid=message.from===me?.uid?me?.uid:(activeFriend?.uid||message.from);const tags=await tagsFor(uid);const head=bubble.querySelector('.message-sender');if(head&&tags.length&&!head.querySelector('.equipped-tags'))head.insertAdjacentHTML('beforeend',tagHTML(tags));},0);return bubble;};}
- window.refreshEquippedTagsEverywhere=()=>{tagCache.clear();decorateFriendTags();};
+  function officialBadges(u){
+    const r=String(u?.role||'member').toLowerCase();
+    let out='';
+    if(u?.verified) out+='<span class="verified-tick" title="Verified">✓</span>';
+    if(r==='developer'||r==='dev') out+='<span class="role-badge admin" title="Developer">DEV</span>';
+    else if(r==='admin') out+='<span class="role-badge admin" title="Admin">ADMIN</span>';
+    else if(r==='mod'||r==='moderator') out+='<span class="role-badge mod" title="Moderator">MOD</span>';
+    else if(r==='vip') out+='<span class="role-badge vip" title="VIP">VIP</span>';
+    return out;
+  }
+  function cleanName(u){ return escapeHtml(u?.displayName||u?.username||'User'); }
+  function officialLabel(u){ return cleanName(u)+' <span class="official-badges">'+officialBadges(u)+'</span>'; }
+  function equippedLabel(u){
+    const tags=(u?.equippedTags||u?.tags||[]).slice(0,5);
+    return tags.length?'<div class="felix-equipped-tags">'+tags.map(t=>'<span class="felix-tag '+rarityClass(t.rarity)+'">'+escapeHtml(t.name)+'</span>').join('')+'</div>':'';
+  }
+  // Chat/header names: official badges only (Verified, DEV/Admin/Mod/VIP).
+  window.userLabel=function(u){ return officialLabel(u); };
+
+  // Friends menu: official badges plus up to 5 equipped collectible tags.
+  const previousRender=window.renderFriends;
+  window.renderFriends=function(){
+    if(typeof previousRender==='function') previousRender();
+    document.querySelectorAll('#friends .friend').forEach((el,i)=>{
+      const f=(window.me?.friends||[])[i];
+      if(!f || el.classList.contains('group-friend')) return;
+      const name=el.querySelector('.friend-info b');
+      if(name) name.innerHTML=officialLabel(f);
+      const info=el.querySelector('.friend-info');
+      if(info){ const old=info.querySelector('.felix-equipped-tags'); if(old) old.remove(); info.insertAdjacentHTML('beforeend',equippedLabel(f)); }
+    });
+  };
+
+  // Re-render after load so the friends menu always gets collectible tags.
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>window.renderFriends&&window.renderFriends(),300));
 })();
 </script>
