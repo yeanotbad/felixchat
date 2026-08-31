@@ -96,8 +96,10 @@ async function init() {
     `ALTER TABLE users ADD COLUMN status_text TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN banner TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN timeout_until INTEGER DEFAULT 0`,
-    `ALTER TABLE users ADD COLUMN timeout_by TEXT DEFAULT ''`
+    `ALTER TABLE users ADD COLUMN timeout_by TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN email TEXT`
   ]) { try { await db.execute(sql); } catch (e) {} }
+  try { await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email COLLATE NOCASE) WHERE email IS NOT NULL`); } catch (e) { console.error('email index',e); }
   // The @felixchat account is the sole owner of the admin powers.
   // This does not change any other account's role.
   try { await db.execute({sql:`UPDATE users SET role='admin' WHERE username='felixchat'`,args:[]}); } catch (e) {}
@@ -360,14 +362,18 @@ app.get('/api/cloudinary-config', auth, async (_req,res)=>{
 app.post('/api/register', async (req,res)=>{
   try {
     const username=clean(req.body.username).toLowerCase();
+    const email=String(req.body.email||'').trim().toLowerCase();
     const password=String(req.body.password||'');
     if(!/^[a-z0-9_]{3,20}$/.test(username)) return res.status(400).json({error:'Username must be 3-20 letters, numbers or _'});
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email)) return res.status(400).json({error:'Enter a valid email address'});
     if(password.length<6) return res.status(400).json({error:'Password must be at least 6 characters'});
     const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=?',args:[username]});
     if(exists.rows.length) return res.status(409).json({error:'Username already exists'});
+    const emailExists=await db.execute({sql:'SELECT uid FROM users WHERE lower(email)=?',args:[email]});
+    if(emailExists.rows.length) return res.status(409).json({error:'This email is already linked to an account'});
     const uid=id(),salt=id(),token=id(),t=now();
     await db.batch([
-      {sql:'INSERT INTO users(uid,username,password_hash,salt,display_name,created_at,last_seen) VALUES(?,?,?,?,?,?,?)',args:[uid,username,hash(password,salt),salt,username,t,t]},
+      {sql:'INSERT INTO users(uid,username,email,password_hash,salt,display_name,created_at,last_seen) VALUES(?,?,?,?,?,?,?,?)',args:[uid,username,email,hash(password,salt),salt,username,t,t]},
       {sql:'INSERT INTO sessions(token,uid,created_at) VALUES(?,?,?)',args:[token,uid,t]}
     ]);
     res.json({token,username});
@@ -376,15 +382,16 @@ app.post('/api/register', async (req,res)=>{
 
 app.post('/api/login', async (req,res)=>{
   try {
-    const username=clean(req.body.username).toLowerCase(), password=String(req.body.password||'');
-    const r=await db.execute({sql:'SELECT * FROM users WHERE username=?',args:[username]});
+    const identifier=String(req.body.username||req.body.email||req.body.identifier||'').trim().toLowerCase();
+    const password=String(req.body.password||'');
+    const r=await db.execute({sql:`SELECT * FROM users WHERE username=? OR lower(COALESCE(email,''))=? LIMIT 1`,args:[identifier,identifier]});
     const u=r.rows[0];
-    if(!u || u.password_hash!==hash(password,u.salt)) return res.status(401).json({error:'Wrong username or password'});
+    if(!u || u.password_hash!==hash(password,u.salt)) return res.status(401).json({error:'Wrong username/email or password'});
     if(Number(u.banned || 0) === 1) return res.status(403).json({error:'This account has been banned.'});
     const token=id(); await db.execute({sql:'INSERT INTO sessions(token,uid,created_at) VALUES(?,?,?)',args:[token,u.uid,now()]});
     await db.execute({sql:'UPDATE users SET last_seen=? WHERE uid=?',args:[now(),u.uid]});
-    res.json({token,username});
-  } catch(e){res.status(500).json({error:'Login failed'});}
+    res.json({token,username:u.username});
+  } catch(e){console.error(e);res.status(500).json({error:'Login failed'});}
 });
 
 app.post('/api/logout',auth,async(req,res)=>{const token=req.headers.authorization?.replace(/^Bearer\s+/i,'');await db.execute({sql:'DELETE FROM sessions WHERE token=?',args:[token]});res.json({ok:true});});
