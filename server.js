@@ -83,7 +83,8 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS equipped_tags (uid TEXT NOT NULL,collectible_id TEXT NOT NULL,position INTEGER NOT NULL,PRIMARY KEY(uid,collectible_id))`,
     `CREATE TABLE IF NOT EXISTS trade_offers (id TEXT PRIMARY KEY,from_uid TEXT NOT NULL,to_uid TEXT NOT NULL,give_json TEXT NOT NULL,want_json TEXT NOT NULL,status TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_offers(to_uid,status,created_at)`,
-    `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`
+    `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`,
+    `CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -359,6 +360,14 @@ app.get('/api/cloudinary-config', auth, async (_req,res)=>{
   res.json({cloudName,uploadPreset});
 });
 
+async function sendVerificationEmail(email, code){
+  const key=String(process.env.RESEND_API_KEY||'').trim();
+  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
+  if(!key) throw new Error('Email sending is not configured. Add RESEND_API_KEY and FROM_EMAIL in Render.');
+  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat verification code',html:`<h2>Verify your Felix Chat account</h2><p>Your verification code is:</p><h1 style="letter-spacing:6px">${code}</h1><p>This code expires in 10 minutes.</p>`})});
+  if(!r.ok){const txt=await r.text();throw new Error('Email provider error: '+txt.slice(0,160));}
+}
+
 app.post('/api/register', async (req,res)=>{
   try {
     const username=clean(req.body.username).toLowerCase();
@@ -367,17 +376,35 @@ app.post('/api/register', async (req,res)=>{
     if(!/^[a-z0-9_]{3,20}$/.test(username)) return res.status(400).json({error:'Username must be 3-20 letters, numbers or _'});
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email)) return res.status(400).json({error:'Enter a valid email address'});
     if(password.length<6) return res.status(400).json({error:'Password must be at least 6 characters'});
-    const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=?',args:[username]});
-    if(exists.rows.length) return res.status(409).json({error:'Username already exists'});
-    const emailExists=await db.execute({sql:'SELECT uid FROM users WHERE lower(email)=?',args:[email]});
-    if(emailExists.rows.length) return res.status(409).json({error:'This email is already linked to an account'});
-    const uid=id(),salt=id(),token=id(),t=now();
-    await db.batch([
-      {sql:'INSERT INTO users(uid,username,email,password_hash,salt,display_name,created_at,last_seen) VALUES(?,?,?,?,?,?,?,?)',args:[uid,username,email,hash(password,salt),salt,username,t,t]},
-      {sql:'INSERT INTO sessions(token,uid,created_at) VALUES(?,?,?)',args:[token,uid,t]}
-    ]);
-    res.json({token,username});
-  } catch(e){console.error(e);res.status(500).json({error:'Registration failed'});}
+    const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=? OR lower(email)=?',args:[username,email]});
+    if(exists.rows.length) return res.status(409).json({error:'Username or email is already linked to an account'});
+    const pending=await db.execute({sql:'SELECT email FROM email_verifications WHERE username=? AND expires_at>?',args:[username,now()]});
+    if(pending.rows.length) return res.status(409).json({error:'That username is waiting for email verification'});
+    const salt=id(), code=String(Math.floor(100000+Math.random()*900000));
+    const expires=now()+10*60*1000;
+    await db.execute({sql:`INSERT INTO email_verifications(email,username,password_hash,salt,code_hash,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,0,?) ON CONFLICT(email) DO UPDATE SET username=excluded.username,password_hash=excluded.password_hash,salt=excluded.salt,code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0,created_at=excluded.created_at`,args:[email,username,hash(password,salt),salt,hash(code,email),expires,now()]});
+    await sendVerificationEmail(email,code);
+    res.json({ok:true,needsVerification:true,email});
+  } catch(e){console.error(e);res.status(500).json({error:e.message||'Could not send verification code'});}
+});
+
+app.post('/api/verify-email', async (req,res)=>{
+  try{
+    const email=String(req.body.email||'').trim().toLowerCase(), code=String(req.body.code||'').trim();
+    const r=await db.execute({sql:'SELECT * FROM email_verifications WHERE email=?',args:[email]}); const v=r.rows[0];
+    if(!v) return res.status(404).json({error:'No verification request found. Sign up again.'});
+    if(Number(v.expires_at)<now()){await db.execute({sql:'DELETE FROM email_verifications WHERE email=?',args:[email]});return res.status(400).json({error:'That code expired. Please request a new one.'});}
+    if(Number(v.attempts)>=8) return res.status(429).json({error:'Too many incorrect attempts. Request a new code.'});
+    if(hash(code,email)!==v.code_hash){await db.execute({sql:'UPDATE email_verifications SET attempts=attempts+1 WHERE email=?',args:[email]});return res.status(400).json({error:'Incorrect verification code'});}
+    const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=? OR lower(email)=?',args:[v.username,email]}); if(exists.rows.length)return res.status(409).json({error:'That username or email is already in use'});
+    const uid=id(), token=id(), t=now();
+    await db.batch([{sql:'INSERT INTO users(uid,username,email,password_hash,salt,display_name,created_at,last_seen) VALUES(?,?,?,?,?,?,?,?)',args:[uid,v.username,email,v.password_hash,v.salt,v.username,t,t]},{sql:'INSERT INTO sessions(token,uid,created_at) VALUES(?,?,?)',args:[token,uid,t]},{sql:'DELETE FROM email_verifications WHERE email=?',args:[email]}]);
+    res.json({ok:true,token,username:v.username});
+  }catch(e){console.error(e);res.status(500).json({error:'Verification failed'});}
+});
+
+app.post('/api/resend-verification', async (req,res)=>{
+  try{const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:'SELECT * FROM email_verifications WHERE email=?',args:[email]});const v=r.rows[0];if(!v)return res.status(404).json({error:'No pending verification found'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'UPDATE email_verifications SET code_hash=?,expires_at=?,attempts=0 WHERE email=?',args:[hash(code,email),now()+10*60*1000,email]});await sendVerificationEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not resend code'});}
 });
 
 app.post('/api/login', async (req,res)=>{
