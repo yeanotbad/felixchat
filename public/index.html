@@ -1842,10 +1842,12 @@ await response.json()
 
 if(!response.ok){
 
-throw new Error(
+const error = new Error(
 data.error ||
 "Something went wrong"
 );
+error.status = response.status;
+throw error;
 
 }
 
@@ -2059,15 +2061,19 @@ connectSocket();
 
 }
 
-catch{
+catch(error){
 
-localStorage.removeItem(
-"felix_token"
-);
-
-token = null;
-
-loginScreen();
+// Do NOT log users out because of a temporary network/database error.
+// Only remove the saved session when the server explicitly says the token is invalid.
+if(error && (error.status===401 || error.status===403)){
+  localStorage.removeItem("felix_token");
+  token = null;
+  loginScreen();
+} else {
+  console.warn("Could not refresh account data; keeping the user logged in.", error);
+  // Retry once shortly in case Render/Turso was temporarily waking up.
+  if(token) setTimeout(()=>loadUser(), 3000);
+}
 
 }
 
