@@ -2834,7 +2834,12 @@ JSON.parse(event.data);
 if(message.type === "admin_sound"){
   const map={verity:'/sound-verity.mp3',german:'/sound-german.mp3',anime:'/sound-anime.mp3'};
   const src=map[message.sound];
-  if(src){ const a=new Audio(src); a.volume=1; a.play().catch(()=>{}); }
+  if(src){
+    const a=window.__felixAdminSounds?.[message.sound] || new Audio(src);
+    window.__felixAdminSounds=window.__felixAdminSounds||{};
+    window.__felixAdminSounds[message.sound]=a;
+    a.volume=1; a.currentTime=0; a.play().catch(()=>{});
+  }
   return;
 }
 if(message.type === "system_status"){ showSystemStatus(message.status||""); return; }
@@ -3052,7 +3057,6 @@ async function openAdminPanel(){
   }catch(e){alert(e.message)}
 }
 async function playAdminSound(sound){
-  if(!confirm('Play '+sound+' on all currently connected users except you?')) return;
   try{ await api('/admin/soundboard',{method:'POST',body:JSON.stringify({sound})}); }
   catch(e){ alert(e.message||'Could not play sound'); }
 }
@@ -4137,6 +4141,11 @@ window.createFeatureGroup=createGroupWizard;
 
 <!-- Removed the floating side shortcut symbols. Features remain accessible through normal menus and / commands. -->
 
+
+<script>
+window.__felixAdminSounds={};
+['verity','german','anime'].forEach(name=>{const a=new Audio('/sound-'+name+'.mp3');a.preload='auto';window.__felixAdminSounds[name]=a;});
+</script>
 </body>
 
 <style>
