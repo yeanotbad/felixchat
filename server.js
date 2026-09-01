@@ -477,7 +477,33 @@ app.post('/api/logout',auth,async(req,res)=>{const token=req.headers.authorizati
 
 app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
-  const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
+
+  // Treat an accepted friendship as a relationship, not as a single database
+  // direction. Older Felix Chat data can contain only one accepted row, and
+  // the old /api/me query would make those friends disappear for the other
+  // person (especially after a fresh login/device sync). Repair the reciprocal
+  // row whenever we encounter that older form.
+  const fr=await db.execute({sql:`
+    SELECT u.* FROM users u
+    JOIN friendships f ON ((f.user_id=? AND f.friend_id=u.uid) OR (f.friend_id=? AND f.user_id=u.uid))
+    WHERE f.status='accepted'
+    ORDER BY lower(u.username)`,args:[req.uid,req.uid]});
+
+  for(const x of fr.rows){
+    await db.execute({
+      sql:`INSERT INTO friendships(user_id,friend_id,status,created_at)
+           VALUES(?,?, 'accepted', ?)
+           ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,
+      args:[x.uid,req.uid,now()]
+    });
+    await db.execute({
+      sql:`INSERT INTO friendships(user_id,friend_id,status,created_at)
+           VALUES(?,?, 'accepted', ?)
+           ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,
+      args:[req.uid,x.uid,now()]
+    });
+  }
+
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
   const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(x.uid); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
   res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',friends,requests:incoming.rows.map(x=>publicUser(x))});
@@ -536,8 +562,16 @@ app.post('/api/profile/avatar',auth,async(req,res)=>{
 });
 
 app.get('/api/friends',auth,async(req,res)=>{
-  const r=await db.execute({sql:`SELECT u.* FROM friendships f JOIN users u ON u.uid=f.friend_id WHERE f.user_id=? AND f.status='accepted' ORDER BY lower(u.username)`,args:[req.uid]});
-  const out=[]; for(const u of r.rows){const f=publicUser(u,(sockets.get(u.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(u.uid); out.push(f);}
+  const r=await db.execute({sql:`
+    SELECT u.* FROM users u
+    JOIN friendships f ON ((f.user_id=? AND f.friend_id=u.uid) OR (f.friend_id=? AND f.user_id=u.uid))
+    WHERE f.status='accepted' ORDER BY lower(u.username)`,args:[req.uid,req.uid]});
+  const out=[];
+  for(const u of r.rows){
+    await db.execute({sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?, 'accepted', ?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[req.uid,u.uid,now()]});
+    await db.execute({sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?, 'accepted', ?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[u.uid,req.uid,now()]});
+    const f=publicUser(u,(sockets.get(u.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(u.uid); out.push(f);
+  }
   res.json(out);
 });
 
