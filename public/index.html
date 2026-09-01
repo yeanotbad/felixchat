@@ -2158,7 +2158,17 @@ $("friends");
 
 container.innerHTML = "";
 
-me.friends.forEach(friend => {
+const seenFriendIds = new Set();
+const uniqueFriends = (Array.isArray(me.friends) ? me.friends : []).filter(friend => {
+  const uid = String(friend?.uid || '');
+  if(!uid || seenFriendIds.has(uid)) return false;
+  seenFriendIds.add(uid);
+  return true;
+});
+
+me.friends = uniqueFriends;
+
+uniqueFriends.forEach(friend => {
 
 const element =
 document.createElement("div");
