@@ -10,17 +10,25 @@ const webpush = require('web-push');
 
 const PORT = process.env.PORT || 3000;
 const app = express();
+// Signup abuse protection is based on the email/username being submitted, not IP.
+// This avoids blocking lots of legitimate people sharing the same school Wi-Fi.
 const registrationRate = new Map();
-function clientIp(req){ return String(req.headers['x-forwarded-for']||req.socket?.remoteAddress||'unknown').split(',')[0].trim(); }
+function registrationKey(req){
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  const username=String(req.body?.username||'').trim().toLowerCase();
+  return email || username || 'unknown';
+}
 function checkRegistrationRate(req){
-  const ip=clientIp(req), t=Date.now(), windowMs=60*60*1000;
-  let r=registrationRate.get(ip);
+  const key=registrationKey(req), t=Date.now(), windowMs=10*60*1000;
+  let r=registrationRate.get(key);
   if(!r || t-r.start>windowMs) r={start:t,count:0};
   r.count++;
-  registrationRate.set(ip,r);
-  return r.count<=5; // max 5 signup attempts per IP per hour
+  registrationRate.set(key,r);
+  // Normal users get plenty of room; only rapid repeated attempts for the same
+  // email/username are temporarily slowed down.
+  return r.count<=8;
 }
-setInterval(()=>{const t=Date.now(); for(const [ip,r] of registrationRate) if(t-r.start>60*60*1000) registrationRate.delete(ip);},10*60*1000).unref?.();
+setInterval(()=>{const t=Date.now(); for(const [key,r] of registrationRate) if(t-r.start>10*60*1000) registrationRate.delete(key);},5*60*1000).unref?.();
 
 
 const server = http.createServer(app);
