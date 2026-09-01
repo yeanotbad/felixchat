@@ -477,33 +477,7 @@ app.post('/api/logout',auth,async(req,res)=>{const token=req.headers.authorizati
 
 app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
-
-  // Treat an accepted friendship as a relationship, not as a single database
-  // direction. Older Felix Chat data can contain only one accepted row, and
-  // the old /api/me query would make those friends disappear for the other
-  // person (especially after a fresh login/device sync). Repair the reciprocal
-  // row whenever we encounter that older form.
-  const fr=await db.execute({sql:`
-    SELECT u.* FROM users u
-    JOIN friendships f ON ((f.user_id=? AND f.friend_id=u.uid) OR (f.friend_id=? AND f.user_id=u.uid))
-    WHERE f.status='accepted'
-    ORDER BY lower(u.username)`,args:[req.uid,req.uid]});
-
-  for(const x of fr.rows){
-    await db.execute({
-      sql:`INSERT INTO friendships(user_id,friend_id,status,created_at)
-           VALUES(?,?, 'accepted', ?)
-           ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,
-      args:[x.uid,req.uid,now()]
-    });
-    await db.execute({
-      sql:`INSERT INTO friendships(user_id,friend_id,status,created_at)
-           VALUES(?,?, 'accepted', ?)
-           ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,
-      args:[req.uid,x.uid,now()]
-    });
-  }
-
+  const fr=await db.execute({sql:`SELECT DISTINCT u.* FROM users u JOIN friendships f ON ((f.friend_id=u.uid AND f.user_id=?) OR (f.user_id=u.uid AND f.friend_id=?)) WHERE f.status='accepted' AND u.uid<>? ORDER BY u.username`,args:[req.uid,req.uid,req.uid]});
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
   const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(x.uid); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
   res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',friends,requests:incoming.rows.map(x=>publicUser(x))});
@@ -562,30 +536,22 @@ app.post('/api/profile/avatar',auth,async(req,res)=>{
 });
 
 app.get('/api/friends',auth,async(req,res)=>{
-  const r=await db.execute({sql:`
-    SELECT u.* FROM users u
-    JOIN friendships f ON ((f.user_id=? AND f.friend_id=u.uid) OR (f.friend_id=? AND f.user_id=u.uid))
-    WHERE f.status='accepted' ORDER BY lower(u.username)`,args:[req.uid,req.uid]});
-  const out=[];
-  for(const u of r.rows){
-    await db.execute({sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?, 'accepted', ?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[req.uid,u.uid,now()]});
-    await db.execute({sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?, 'accepted', ?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[u.uid,req.uid,now()]});
-    const f=publicUser(u,(sockets.get(u.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(u.uid); out.push(f);
-  }
+  const r=await db.execute({sql:`SELECT DISTINCT u.* FROM friendships f JOIN users u ON ((f.friend_id=u.uid AND f.user_id=?) OR (f.user_id=u.uid AND f.friend_id=?)) WHERE f.status='accepted' AND u.uid<>? ORDER BY lower(u.username)`,args:[req.uid,req.uid,req.uid]});
+  const out=[]; for(const u of r.rows){const f=publicUser(u,(sockets.get(u.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(u.uid); out.push(f);}
   res.json(out);
 });
 
 app.post('/api/friends/request',auth,async(req,res)=>{
   const username=clean(req.body.username).toLowerCase(); const r=await db.execute({sql:'SELECT * FROM users WHERE username=?',args:[username]}); const target=r.rows[0];
   if(!target)return res.status(404).json({error:'User not found'}); if(target.uid===req.uid)return res.status(400).json({error:"You can't add yourself"}); if(await blocked(req.uid,target.uid)||await blocked(target.uid,req.uid))return res.status(403).json({error:'Friend request unavailable'});
-  const f=await db.execute({sql:'SELECT status FROM friendships WHERE user_id=? AND friend_id=?',args:[req.uid,target.uid]}); if(f.rows[0]?.status==='accepted')return res.json({ok:true,message:'Already friends'});
+  const f=await db.execute({sql:'SELECT user_id,friend_id,status FROM friendships WHERE (user_id=? AND friend_id=?) OR (user_id=? AND friend_id=?)',args:[req.uid,target.uid,target.uid,req.uid]}); if(f.rows.some(x=>x.status==='accepted'))return res.json({ok:true,message:'Already friends'}); if(f.rows.some(x=>x.status==='pending'))return res.json({ok:true,message:'Friend request already sent'});
   await db.batch([
     {sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='pending'`,args:[req.uid,target.uid,'pending',now()]},
     {sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO NOTHING`,args:[target.uid,req.uid,'none',now()]}
   ]); broadcast(target.uid,{type:'friend_request',from:(await getUser(req.uid)).username,uid:req.uid});res.json({ok:true});
 });
 
-app.post('/api/friends/accept',auth,async(req,res)=>{const other=req.body.uid; if(!await getUser(other))return res.status(404).json({error:'User not found'}); await db.batch([{sql:`UPDATE friendships SET status='accepted' WHERE user_id=? AND friend_id=?`,args:[other,req.uid]},{sql:`UPDATE friendships SET status='accepted' WHERE user_id=? AND friend_id=?`,args:[req.uid,other]}]); pair(req.uid,other,{type:'friend_accepted'});res.json({ok:true});});
+app.post('/api/friends/accept',auth,async(req,res)=>{const other=req.body.uid; if(!await getUser(other))return res.status(404).json({error:'User not found'}); await db.batch([{sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[other,req.uid,'accepted',now()]},{sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[req.uid,other,'accepted',now()]}]); pair(req.uid,other,{type:'friend_accepted'});res.json({ok:true});});
 app.post('/api/friends/decline',auth,async(req,res)=>{await db.execute({sql:`UPDATE friendships SET status='declined' WHERE user_id=? AND friend_id=?`,args:[req.body.uid,req.uid]});res.json({ok:true});});
 app.delete('/api/friends/:uid',auth,async(req,res)=>{await db.batch([{sql:'DELETE FROM friendships WHERE user_id=? AND friend_id=?',args:[req.uid,req.params.uid]},{sql:'DELETE FROM friendships WHERE user_id=? AND friend_id=?',args:[req.params.uid,req.uid]}]);res.json({ok:true});});
 app.post('/api/block/:uid',auth,async(req,res)=>{await db.execute({sql:'INSERT OR IGNORE INTO blocks(uid,blocked_uid,created_at) VALUES(?,?,?)',args:[req.uid,req.params.uid,now()]});res.json({ok:true});});
