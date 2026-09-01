@@ -4619,3 +4619,43 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
   body:not(.mobile-chat-open) .sidebar{padding-bottom:max(14px,env(safe-area-inset-bottom))!important;}
 }
 </style>
+
+<!-- Portrait mobile final fix: hide the unused chat panel/spacer, keep friends and the real chat composer -->
+<style id="portrait-mobile-square-fix">
+@media (max-width:768px) and (orientation:portrait){
+  html,body{background:#080914!important;}
+  .app{display:block!important;width:100vw!important;height:100dvh!important;overflow:hidden!important;background:#080914!important;}
+  /* On the friends screen there must be no second chat panel underneath it. */
+  body:not(.mobile-chat-open):not(.felix-ios-chat-open) .chat{
+    display:none!important;
+    position:static!important;
+    width:0!important;height:0!important;
+    min-height:0!important;min-width:0!important;
+    margin:0!important;padding:0!important;
+    overflow:hidden!important;
+  }
+  body:not(.mobile-chat-open):not(.felix-ios-chat-open) .sidebar{
+    display:flex!important;
+    width:100vw!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    margin:0!important;
+    padding:10px 12px max(14px,env(safe-area-inset-bottom))!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    background:#0d1320!important;
+  }
+  /* Remove only empty visual spacer surfaces, not buttons or the chat input. */
+  .mobile-nav,#mobileNav{display:none!important;}
+}
+</style>
+<style>
+/* FINAL MOBILE VIEWPORT FIX: force the app to start at the top and fill the phone. */
+@media (max-width:700px) and (orientation:portrait){
+  html, body { margin:0!important; padding:0!important; width:100%!important; min-height:100%!important; height:100dvh!important; overflow:hidden!important; }
+  body { position:fixed!important; inset:0!important; }
+  .app { position:absolute!important; top:0!important; left:0!important; right:0!important; bottom:0!important; width:100%!important; height:100dvh!important; min-height:100dvh!important; max-height:none!important; transform:none!important; }
+  .sidebar { position:absolute!important; top:0!important; left:0!important; width:100%!important; height:100dvh!important; min-height:100dvh!important; max-height:none!important; margin:0!important; transform:none!important; overflow-y:auto!important; -webkit-overflow-scrolling:touch; }
+  .chat { position:absolute!important; top:0!important; left:0!important; width:100%!important; height:100dvh!important; min-height:100dvh!important; max-height:none!important; margin:0!important; transform:none!important; }
+}
+</style>
