@@ -2832,14 +2832,7 @@ const message =
 JSON.parse(event.data);
 
 if(message.type === "admin_sound"){
-  const map={verity:'/sound-verity.mp3',german:'/sound-german.mp3',anime:'/sound-anime.mp3'};
-  const src=map[message.sound];
-  if(src){
-    const a=window.__felixAdminSounds?.[message.sound] || new Audio(src);
-    window.__felixAdminSounds=window.__felixAdminSounds||{};
-    window.__felixAdminSounds[message.sound]=a;
-    a.volume=1; a.currentTime=0; a.play().catch(()=>{});
-  }
+  if(typeof playFelixAdminSound==='function') playFelixAdminSound(message.sound);
   return;
 }
 if(message.type === "system_status"){ showSystemStatus(message.status||""); return; }
@@ -4144,6 +4137,48 @@ window.createFeatureGroup=createGroupWizard;
 
 <script>
 window.__felixAdminSounds={};
+
+/* Reliable admin sound playback helper */
+window.__felixAudioUnlocked=false;
+window.__felixPendingAdminSound=null;
+window.__felixAdminSounds=window.__felixAdminSounds||{};
+function initFelixAdminAudio(){
+  ['verity','german','anime'].forEach(name=>{
+    const src='/sound-'+name+'.mp3';
+    let a=window.__felixAdminSounds[name];
+    if(!a){ a=new Audio(src); window.__felixAdminSounds[name]=a; }
+    a.preload='auto';
+    a.load();
+  });
+}
+function unlockFelixAdminAudio(){
+  if(window.__felixAudioUnlocked) return;
+  window.__felixAudioUnlocked=true;
+  initFelixAdminAudio();
+  if(window.__felixPendingAdminSound){
+    const pending=window.__felixPendingAdminSound;
+    window.__felixPendingAdminSound=null;
+    playFelixAdminSound(pending);
+  }
+}
+function playFelixAdminSound(name){
+  const srcMap={verity:'/sound-verity.mp3',german:'/sound-german.mp3',anime:'/sound-anime.mp3'};
+  if(!srcMap[name]) return;
+  initFelixAdminAudio();
+  const a=window.__felixAdminSounds[name];
+  a.pause();
+  a.currentTime=0;
+  a.volume=1;
+  a.muted=false;
+  a.play().catch(()=>{
+    window.__felixPendingAdminSound=name;
+  });
+}
+['pointerdown','touchstart','keydown','click'].forEach(ev=>{
+  document.addEventListener(ev,unlockFelixAdminAudio,{once:true,passive:true});
+});
+initFelixAdminAudio();
+
 ['verity','german','anime'].forEach(name=>{const a=new Audio('/sound-'+name+'.mp3');a.preload='auto';window.__felixAdminSounds[name]=a;});
 </script>
 </body>
@@ -4692,4 +4727,48 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
 window.__felixNotificationSound = new Audio('/felix-notification.mp3');
 window.__felixNotificationSound.preload='auto';
 window.playFelixNotificationSound=function(){try{const a=window.__felixNotificationSound;a.currentTime=0;a.play().catch(()=>{});}catch(e){}}
+</script>
+
+<!-- iPad/tablet friends reliability fix -->
+<style id="felix-ipad-all-friends-fix">
+/* Some tablet browsers were matching old responsive rules that hid/truncated
+   friend rows. Force every real friend row to remain visible on tablets. */
+@media (min-width:701px) and (max-width:1180px){
+  #friends{display:block!important;width:100%!important;max-height:none!important;height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;}
+  #friends>.friend{display:flex!important;visibility:visible!important;opacity:1!important;width:100%!important;min-height:58px!important;max-height:none!important;position:relative!important;transform:none!important;}
+  #friends>.friend:nth-child(n){display:flex!important;visibility:visible!important;opacity:1!important;}
+}
+@media (max-width:1180px){
+  #friends .friend[hidden]{display:flex!important;}
+}
+</style>
+<script id="felix-ipad-friends-data-fix">
+(function(){
+  /* Rebuild from the full server-provided friend array. This prevents an old
+     tablet-only render/cache path from leaving only the first rows onscreen. */
+  function ensureAllFriends(){
+    const list=document.getElementById('friends');
+    if(!list || !window.me || !Array.isArray(window.me.friends)) return;
+    const realRows=[...list.querySelectorAll('.friend:not(.group-friend)')];
+    if(realRows.length < window.me.friends.length && typeof window.renderFriends==='function'){
+      try{ window.renderFriends(); }catch(e){ console.warn('Friends redraw failed',e); }
+    }
+    [...list.querySelectorAll('.friend')].forEach(row=>{
+      row.style.display='flex'; row.style.visibility='visible'; row.style.opacity='1';
+      row.hidden=false;
+    });
+  }
+  const previous=window.renderFriends;
+  if(typeof previous==='function' && !window.__felixIpadFriendFix){
+    window.__felixIpadFriendFix=true;
+    window.renderFriends=function(){
+      const result=previous.apply(this,arguments);
+      requestAnimationFrame(ensureAllFriends);
+      return result;
+    };
+  }
+  window.addEventListener('resize',ensureAllFriends,{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(ensureAllFriends,100);});
+  setInterval(ensureAllFriends,2000);
+})();
 </script>
