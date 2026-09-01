@@ -1903,6 +1903,8 @@ options.headers.Authorization =
 
 }
 
+// Friends/account data must never come from a stale tablet/PWA cache.
+options.cache = 'no-store';
 const response =
 await fetch(API + url,options);
 
@@ -4180,6 +4182,60 @@ function playFelixAdminSound(name){
 initFelixAdminAudio();
 
 ['verity','german','anime'].forEach(name=>{const a=new Audio('/sound-'+name+'.mp3');a.preload='auto';window.__felixAdminSounds[name]=a;});
+</script>
+
+<style id="felix-ipad-deep-friends-fix">
+/* Tablet/iPad: never use clipping, column balancing, or content containment
+   on the actual server-rendered friends list. */
+@media (min-width:701px) and (max-width:1366px){
+  #friends{
+    display:block!important;
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    contain:none!important;
+    content-visibility:visible!important;
+    columns:1!important;
+  }
+  #friends>.friend{
+    display:flex!important;
+    visibility:visible!important;
+    opacity:1!important;
+    position:relative!important;
+    height:auto!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+}
+</style>
+<script id="felix-ipad-deep-friends-script">
+(function(){
+  async function refreshTabletFriends(){
+    const w=Math.max(window.innerWidth||0,document.documentElement.clientWidth||0);
+    if(w<701 || w>1366 || !window.token || typeof window.api!=='function') return;
+    try{
+      const fresh=await window.api('/me',{cache:'no-store'});
+      if(fresh && Array.isArray(fresh.friends)){
+        const oldUid=window.activeFriend && window.activeFriend.uid;
+        window.me=fresh;
+        if(oldUid) window.activeFriend=fresh.friends.find(f=>String(f.uid)===String(oldUid))||null;
+        if(typeof window.renderFriends==='function') window.renderFriends();
+      }
+    }catch(e){ console.warn('Tablet friends refresh failed',e); }
+  }
+  window.addEventListener('pageshow',()=>setTimeout(refreshTabletFriends,250));
+  window.addEventListener('orientationchange',()=>setTimeout(refreshTabletFriends,500));
+  window.addEventListener('resize',()=>{
+    clearTimeout(window.__felixTabletFriendTimer);
+    window.__felixTabletFriendTimer=setTimeout(refreshTabletFriends,350);
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden) setTimeout(refreshTabletFriends,300);
+  });
+  setTimeout(refreshTabletFriends,800);
+})();
 </script>
 </body>
 
