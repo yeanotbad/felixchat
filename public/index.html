@@ -2831,6 +2831,12 @@ event => {
 const message =
 JSON.parse(event.data);
 
+if(message.type === "admin_sound"){
+  const map={verity:'/sound-verity.mp3',german:'/sound-german.mp3',anime:'/sound-anime.mp3'};
+  const src=map[message.sound];
+  if(src){ const a=new Audio(src); a.volume=1; a.play().catch(()=>{}); }
+  return;
+}
 if(message.type === "system_status"){ showSystemStatus(message.status||""); return; }
 if(message.type==='timeout'){ showTimeout(message.until,message.by); }
 if(message.type==='timeout_ended'){ clearTimeoutOverlay(); loadUser(); }
@@ -2883,7 +2889,7 @@ if(message.type === "reaction"){
 if(message.type==='group_added'){api('/groups').then(g=>{featureGroups=g;renderFriends();if(message.notification)showGroupToast(message.notification);}).catch(()=>{});}
 if(message.type === "group_message"){
   if(activeGroup && message.message?.gid===activeGroup.gid) appendGroupMessage(message.message);
-  if(browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid) new Notification('Felix Chat',{body:(message.message?.text||'New group message').slice(0,100)});
+  if(message.message?.from!==me?.uid){ playFelixNotificationSound(); if(browserNotificationsEnabled && document.hidden) new Notification('Felix Chat',{body:(message.message?.text||'New group message').slice(0,100)}); }
 }
 if(message.type === "typing"){
   if(activeFriend && message.uid===activeFriend.uid){ const el=$('featureTypingIndicator'); if(el)el.textContent=message.typing?'Typing…':''; }
@@ -2891,7 +2897,7 @@ if(message.type === "typing"){
 if(message.type === "group_typing"){
   if(activeGroup && message.uid!==me?.uid && message.typing){ const el=$('featureTypingIndicator'); if(el)el.textContent='Someone is typing…'; setTimeout(()=>{if(el)el.textContent=''},1200); }
 }
-if(message.type === "message" && browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid){ new Notification('Felix Chat',{body:(message.message?.text||'New message').slice(0,100)}); }
+if(message.type === "message" && message.message?.from!==me?.uid){ playFelixNotificationSound(); if(browserNotificationsEnabled && document.hidden){ const from=message.message?.from||''; new Notification('Felix Chat',{body:(message.message?.text||'New message').slice(0,100),data:{from}}); } }
 function showRankToast(title,detail){
   const old=document.querySelector('.rank-toast'); if(old) old.remove();
   const el=document.createElement('div'); el.className='rank-toast';
@@ -3040,11 +3046,17 @@ async function openAdminPanel(){
   try{
     const status=await api('/admin/status');
     if(!status.admin)return alert('Admin access required');
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="openBulkGrant()" style="margin-top:8px;width:100%">🎁 Grant Tags / Items</button><button class="btn" onclick="openServerStatusPanel()" style="margin-top:8px;width:100%">Server Status</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><div style="margin-top:12px;padding:12px;border:1px solid rgba(255,255,255,.14);border-radius:14px"><div class="small" style="margin-bottom:8px">🔊 Admin Soundboard</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="playAdminSound('verity')">🔊 Verity</button><button class="btn" onclick="playAdminSound('german')">🔊 German</button><button class="btn" onclick="playAdminSound('anime')">🔊 Anime</button></div></div><button class="btn" onclick="openBulkGrant()" style="margin-top:8px;width:100%">🎁 Grant Tags / Items</button><button class="btn" onclick="openServerStatusPanel()" style="margin-top:8px;width:100%">Server Status</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
 }
+async function playAdminSound(sound){
+  if(!confirm('Play '+sound+' on all currently connected users except you?')) return;
+  try{ await api('/admin/soundboard',{method:'POST',body:JSON.stringify({sound})}); }
+  catch(e){ alert(e.message||'Could not play sound'); }
+}
+
 async function openModPanel(){
   if(!['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
   try{
@@ -4659,3 +4671,16 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
   .chat { position:absolute!important; top:0!important; left:0!important; width:100%!important; height:100dvh!important; min-height:100dvh!important; max-height:none!important; margin:0!important; transform:none!important; }
 }
 </style>
+<style>
+/* iPad/tablet friends list: use the available screen and never collapse to one row */
+@media (min-width: 600px) and (max-width: 1024px){
+  .friends{display:block!important;max-height:calc(100dvh - 170px)!important;height:auto!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;padding-bottom:24px!important}
+  .friend{display:flex!important;width:100%!important;min-height:64px!important;visibility:visible!important;opacity:1!important}
+}
+</style>
+<script>
+/* Felix custom in-app notification sound */
+window.__felixNotificationSound = new Audio('/felix-notification.mp3');
+window.__felixNotificationSound.preload='auto';
+window.playFelixNotificationSound=function(){try{const a=window.__felixNotificationSound;a.currentTime=0;a.play().catch(()=>{});}catch(e){}}
+</script>
