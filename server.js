@@ -362,6 +362,14 @@ function broadcast(uid, payload) {
   for (const ws of set) if (ws.readyState === WebSocket.OPEN) ws.send(data);
 }
 function pair(a,b,payload){ broadcast(a,payload); broadcast(b,payload); }
+function broadcastAll(payload, excludeUid=null) {
+  const data=JSON.stringify(payload);
+  for(const [targetUid,set] of sockets){
+    if(excludeUid && targetUid===excludeUid) continue;
+    for(const ws of set) if(ws.readyState===WebSocket.OPEN) ws.send(data);
+  }
+}
+
 
 async function equippedTagsFor(uid){
   try{
@@ -704,6 +712,18 @@ async function requireModerator(req,res){
   }
   return true;
 }
+app.post('/api/admin/soundboard',auth,async(req,res)=>{
+  try{
+    const u=await getUser(req.uid);
+    if(String(u?.username||'').toLowerCase()!=='felixchat' || String(u?.role||'').toLowerCase()!=='admin')
+      return res.status(403).json({error:'Only @felixchat can use the soundboard.'});
+    const sound=String(req.body?.sound||'');
+    if(!['verity','german','anime'].includes(sound)) return res.status(400).json({error:'Unknown sound.'});
+    broadcastAll({type:'admin_sound',sound},req.uid);
+    res.json({ok:true});
+  }catch(e){res.status(500).json({error:'Could not broadcast sound.'});}
+});
+
 app.get('/api/admin/status',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   res.json({admin:u?.username==='felixchat' && String(u.role||'')==='admin', moderator:['admin','mod'].includes(String(u?.role||'').toLowerCase()), role:u?.role||'member'});
