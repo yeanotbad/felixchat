@@ -4610,3 +4610,12 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
   }
 }
 </style>
+
+<!-- Final mobile cleanup: remove duplicate bottom HUD/navigation; keep the chat input and friend picker. -->
+<style id="mobile-bottom-hud-removed">
+@media(max-width:768px){
+  .mobile-nav,#mobileNav{display:none!important;}
+  .sidebar{padding-bottom:max(14px,env(safe-area-inset-bottom))!important;}
+  body:not(.mobile-chat-open) .sidebar{padding-bottom:max(14px,env(safe-area-inset-bottom))!important;}
+}
+</style>
