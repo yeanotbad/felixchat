@@ -97,7 +97,8 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS trade_offers (id TEXT PRIMARY KEY,from_uid TEXT NOT NULL,to_uid TEXT NOT NULL,give_json TEXT NOT NULL,want_json TEXT NOT NULL,status TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_offers(to_uid,status,created_at)`,
     `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`,
-    `CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`
+    `CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS password_resets (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -373,6 +374,17 @@ app.get('/api/cloudinary-config', auth, async (_req,res)=>{
   res.json({cloudName,uploadPreset});
 });
 
+const DISPOSABLE_DOMAINS=new Set(['10minutemail.com','10minutemail.net','guerrillamail.com','guerrillamail.info','mailinator.com','tempmail.com','temp-mail.org','throwawaymail.com','yopmail.com','getnada.com','dispostable.com']);
+function isDisposableEmail(email){ const domain=String(email).toLowerCase().split('@').pop(); return DISPOSABLE_DOMAINS.has(domain); }
+
+async function sendPasswordResetEmail(email, code){
+  const key=String(process.env.RESEND_API_KEY||'').trim();
+  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
+  if(!key) throw new Error('Email sending is not configured.');
+  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat password reset code',html:`<h2>Reset your Felix Chat password</h2><p>Your 6-digit reset code is:</p><h1 style="letter-spacing:6px">${code}</h1><p>This code expires in 10 minutes.</p>`})});
+  if(!r.ok) throw new Error('Could not send reset email.');
+}
+
 async function sendVerificationEmail(email, code){
   const key=String(process.env.RESEND_API_KEY||'').trim();
   const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
@@ -391,6 +403,7 @@ app.post('/api/register', async (req,res)=>{
     const password=String(req.body.password||'');
     if(!/^[a-z0-9_]{3,20}$/.test(username)) return res.status(400).json({error:'Username must be 3-20 letters, numbers or _'});
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email)) return res.status(400).json({error:'Enter a valid email address'});
+    if(isDisposableEmail(email)) return res.status(400).json({error:'Temporary or disposable email addresses are not allowed.'});
     if(password.length<6) return res.status(400).json({error:'Password must be at least 6 characters'});
     const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=? OR lower(email)=?',args:[username,email]});
     if(exists.rows.length) return res.status(409).json({error:'Username or email is already linked to an account'});
@@ -422,6 +435,9 @@ app.post('/api/verify-email', async (req,res)=>{
 app.post('/api/resend-verification', async (req,res)=>{
   try{const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:'SELECT * FROM email_verifications WHERE email=?',args:[email]});const v=r.rows[0];if(!v)return res.status(404).json({error:'No pending verification found'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'UPDATE email_verifications SET code_hash=?,expires_at=?,attempts=0 WHERE email=?',args:[hash(code,email),now()+10*60*1000,email]});await sendVerificationEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not resend code'});}
 });
+
+app.post('/api/forgot-password', async (req,res)=>{try{const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:"SELECT email FROM users WHERE lower(COALESCE(email,''))=? LIMIT 1",args:[email]});if(!r.rows[0])return res.status(404).json({error:'No account was found with that email.'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'INSERT INTO password_resets(email,code_hash,expires_at,attempts,created_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0,created_at=excluded.created_at',args:[email,hash(code,email),now()+10*60*1000,0,now()]});await sendPasswordResetEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not send reset code'});}});
+app.post('/api/reset-password', async (req,res)=>{try{const email=String(req.body.email||'').trim().toLowerCase(),code=String(req.body.code||'').trim(),password=String(req.body.password||'');if(password.length<6)return res.status(400).json({error:'Password must be at least 6 characters.'});const r=await db.execute({sql:'SELECT * FROM password_resets WHERE email=?',args:[email]}),v=r.rows[0];if(!v)return res.status(404).json({error:'No reset request found.'});if(Number(v.expires_at)<now())return res.status(400).json({error:'That code expired. Request a new one.'});if(Number(v.attempts)>=8)return res.status(429).json({error:'Too many incorrect attempts.'});if(hash(code,email)!==v.code_hash){await db.execute({sql:'UPDATE password_resets SET attempts=attempts+1 WHERE email=?',args:[email]});return res.status(400).json({error:'Incorrect reset code.'});}const u=(await db.execute({sql:"SELECT uid FROM users WHERE lower(COALESCE(email,''))=? LIMIT 1",args:[email]})).rows[0];const salt=crypto.randomBytes(16).toString('hex');await db.batch([{sql:'UPDATE users SET salt=?,password_hash=? WHERE uid=?',args:[salt,hash(password,salt),u.uid]},{sql:'DELETE FROM password_resets WHERE email=?',args:[email]},{sql:'DELETE FROM sessions WHERE uid=?',args:[u.uid]}]);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:'Password reset failed'});}});
 
 app.post('/api/login', async (req,res)=>{
   try {
