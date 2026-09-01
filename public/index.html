@@ -2101,7 +2101,7 @@ async function loadUser(){
 try{
 
 me =
-await api("/me");
+await api("/me?fresh="+Date.now(),{cache:"no-store"});
 if(Number(me.timeoutUntil||0)>Date.now()) showTimeout(me.timeoutUntil,me.timeoutBy); else clearTimeoutOverlay();
 
 $("myName").textContent =
@@ -2133,6 +2133,21 @@ if(error && (error.status===401 || error.status===403)){
 
 }
 
+
+
+/* FELIX_FRIENDS_SYNC_V2: tablet-safe friend/presence recovery */
+setInterval(async()=>{
+  if(!token || !me) return;
+  try{
+    const latest=await api('/me?fresh='+Date.now(),{cache:'no-store'});
+    if(latest && Array.isArray(latest.friends)){
+      const oldActive=activeFriend?.uid;
+      me=latest;
+      if(oldActive) activeFriend=me.friends.find(f=>String(f.uid)===String(oldActive))||activeFriend;
+      renderFriends();
+    }
+  }catch(_){}
+},15000);
 
 /* FRIEND LIST */
 
@@ -2833,6 +2848,21 @@ event => {
 const message =
 JSON.parse(event.data);
 
+if(message.type==='presence_update'){
+  const changedUid=String(message.uid||'');
+  if(me && Array.isArray(me.friends)){
+    let changed=false;
+    me.friends.forEach(f=>{
+      if(String(f.uid)===changedUid){
+        f.online=!!message.online;
+        f.lastSeen=message.lastSeen||Date.now();
+        changed=true;
+      }
+    });
+    if(changed && typeof renderFriends==='function') renderFriends();
+  }
+  return;
+}
 if(message.type === "admin_sound"){
   if(typeof playFelixAdminSound==='function') playFelixAdminSound(message.sound);
   return;
