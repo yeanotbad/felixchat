@@ -1906,12 +1906,15 @@ onclick="login()"
 Log In
 </button>
 
-</div>
+</div><br><button class="btn" onclick="forgotPassword()">Forgot Password?</button>
 
 `);
 
 }
 
+
+async function forgotPassword(){const email=prompt('Enter the email linked to your Felix Chat account:');if(!email)return;try{await api('/forgot-password',{method:'POST',body:JSON.stringify({email})});openModal(`<h2>🔐 Reset Password</h2><p>Enter the 6-digit code sent to your email.</p><input id="resetCode" class="input" inputmode="numeric" maxlength="6" placeholder="6-digit code"><br><br><input id="resetPassword" class="input" type="password" placeholder="New password"><br><br><button class="btn primary" onclick="finishPasswordReset('${email.replace(/'/g, "\'")}')">Reset Password</button>`);}catch(e){alert(e.message)}}
+async function finishPasswordReset(email){try{await api('/reset-password',{method:'POST',body:JSON.stringify({email,code:$('resetCode').value,password:$('resetPassword').value})});alert('Password changed! You can now log in.');closeModal();loginScreen();}catch(e){alert(e.message)}}
 
 async function register(){
 try{
@@ -4471,3 +4474,50 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
 </script>
 
 <style>@media(max-width:700px){#friendsList,.friends-list,.friendsPanel{max-height:calc(100vh - 130px)!important;height:calc(100vh - 130px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;}}</style>
+<!-- Mobile friends-first layout fix: keep every command, give friends most of the screen -->
+<style>
+@media (max-width:700px){
+  html,body{height:100dvh!important;overflow:hidden!important;background:#0b0d12!important}
+  .app{height:100dvh!important;overflow:hidden!important}
+  .sidebar{
+    height:100dvh!important;
+    box-sizing:border-box!important;
+    display:flex!important;
+    flex-direction:column!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior-y:contain!important;
+    padding-bottom:calc(82px + env(safe-area-inset-bottom))!important;
+    background:inherit!important;
+  }
+  /* Friends are the main mobile content and get almost the whole viewport. */
+  #friends,.friends,#friendsList,.friends-list,.friendsPanel{
+    display:block!important;
+    width:100%!important;
+    box-sizing:border-box!important;
+    flex:0 0 auto!important;
+    height:calc(100dvh - 185px)!important;
+    min-height:calc(100dvh - 185px)!important;
+    max-height:none!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    touch-action:pan-y!important;
+    overscroll-behavior:contain!important;
+    padding-bottom:18px!important;
+  }
+  .friend{
+    width:100%!important;
+    box-sizing:border-box!important;
+    min-height:66px!important;
+    margin:4px 0!important;
+    padding:10px!important;
+  }
+  /* Keep all other buttons/commands below the friends area; nothing is removed. */
+  .sidebar > :not(#friends):not(.friends):not(#friendsList):not(.friends-list):not(.friendsPanel){
+    flex:0 0 auto!important;
+  }
+  .mobile-nav{z-index:50!important;}
+}
+</style>
