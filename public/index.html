@@ -4591,3 +4591,22 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
   .mobile-nav{z-index:50!important;}
 }
 </style>
+<!-- Mobile cleanup: remove the unwanted dark/blue spacer panel without changing controls -->
+<style id="mobile-rectangle-cleanup">
+@media(max-width:700px){
+  body.mobile-chat-open .chat{background:#080b16!important;}
+  body.mobile-chat-open .story-strip:empty{display:none!important;}
+  body.mobile-chat-open .composer{
+    margin:0!important;
+    background:#080b16!important;
+    background-image:none!important;
+    border-top:0!important;
+    box-shadow:none!important;
+    backdrop-filter:none!important;
+  }
+  body.mobile-chat-open .messages{
+    margin:0!important;
+    background:#080b16!important;
+  }
+}
+</style>
