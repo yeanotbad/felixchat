@@ -1034,8 +1034,16 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-seri
   .chat{width:calc(100% - var(--felix-sidebar-width));transition:width .22s ease;}
 }
 
+
+/* Grab-to-resize divider: the chat/friends boundary is directly draggable. */
+.felix-resize-handle{display:flex;flex:0 0 8px;width:8px;align-items:center;justify-content:center;cursor:col-resize;touch-action:none;user-select:none;position:relative;z-index:20;background:transparent;transition:background .18s ease}
+.felix-resize-handle::after{content:'';width:3px;height:42px;border-radius:999px;background:rgba(148,163,184,.28);transition:transform .18s ease,background .18s ease,height .18s ease}
+.felix-resize-handle:hover::after,.felix-resize-handle.dragging::after{height:64px;transform:scaleX(1.35);background:var(--accent)}
+.felix-resize-handle:hover,.felix-resize-handle.dragging{background:rgba(139,92,246,.08)}
+@media(max-width:700px){.felix-resize-handle{display:none}}
+
 .chat-size-control{
-  display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid rgba(139,92,246,.18);
+  display:none; /* replaced by the grab handle */align-items:center;gap:9px;padding:8px 10px;border:1px solid rgba(139,92,246,.18);
   background:rgba(17,21,40,.72);border-radius:12px;
 }
 .chat-size-control label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:700}
@@ -1485,7 +1493,12 @@ async function sendBulkGrant(){const uids=[...document.querySelectorAll('.bulk-u
      grid.dataset.columnMajor='1';
    });
  }
- setInterval(makeTwoVerticalColumns,250);
+ makeTwoVerticalColumns();
+ const root=document.body;
+ if(root && window.MutationObserver){
+   const observer=new MutationObserver(()=>requestAnimationFrame(makeTwoVerticalColumns));
+   observer.observe(root,{childList:true,subtree:true});
+ }
 })();
 </script>
 
@@ -1770,6 +1783,8 @@ Log Out
 </button>
 
 </aside>
+
+<div id="felixResizeHandle" class="felix-resize-handle" role="separator" aria-label="Resize friends and chat panels" aria-orientation="vertical" title="Drag to resize"></div>
 
 <main class="chat">
 
@@ -3880,11 +3895,6 @@ window.createFeatureGroup=createGroupWizard;
 
 <script id="felix-profile-score-upgrade">
 (function(){
- const oldFetch=window.fetch;
- window.fetch=async function(...args){
-   const r=await oldFetch.apply(this,args);
-   return r;
- };
  async function enhance(){
    document.querySelectorAll('[data-profile-uid]').forEach(async el=>{
      if(el.dataset.felixEnhanced) return;
@@ -3898,7 +3908,16 @@ window.createFeatureGroup=createGroupWizard;
      }catch(e){}
    });
  }
- setInterval(enhance,700);
+ enhance();
+ const root=document.body;
+ if(root && window.MutationObserver){
+   let queued=false;
+   const observer=new MutationObserver(()=>{
+     if(queued) return; queued=true;
+     requestAnimationFrame(()=>{queued=false; enhance();});
+   });
+   observer.observe(root,{childList:true,subtree:true});
+ }
 })();
 </script>
 
@@ -4419,26 +4438,52 @@ initFelixAdminAudio();
 
 <script id="felix-chat-size-control">
 (function(){
-  const slider=document.getElementById('chatSizeSlider');
-  const value=document.getElementById('chatSizeValue');
-  if(!slider) return;
+  const handle=document.getElementById('felixResizeHandle');
+  const sidebar=document.querySelector('.sidebar');
+  if(!handle || !sidebar) return;
+  const root=document.documentElement;
+  const KEY='felix_chat_width_v2';
   const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
-  function apply(v,save=true){
-    v=clamp(Number(v)||55,25,75);
-    // Higher percentage = wider chat and a narrower friends/sidebar panel.
-    const sidebar=Math.round(100 - v);
-    const width=Math.round(220 + (sidebar-25)/50*180);
-    document.documentElement.style.setProperty('--felix-sidebar-width',width+'px');
-    slider.value=v;
-    if(value) value.textContent=v+'%';
-    if(save){try{localStorage.setItem('felix_chat_size',String(v));}catch(e){}}
+  function apply(width,save=true){
+    const max=Math.max(320,Math.floor(window.innerWidth*0.60));
+    width=clamp(Number(width)||320,220,max);
+    root.style.setProperty('--felix-sidebar-width',width+'px');
+    if(save){try{localStorage.setItem(KEY,String(width));}catch(e){}}
   }
-  let saved=55;
-  try{saved=Number(localStorage.getItem('felix_chat_size'))||55;}catch(e){}
+  let saved=320;
+  try{saved=Number(localStorage.getItem(KEY))||320;}catch(e){}
   apply(saved,false);
-  slider.addEventListener('input',()=>apply(slider.value));
+  let dragging=false;
+  let startX=0,startW=0;
+  function begin(e){
+    if(window.matchMedia('(max-width:700px)').matches) return;
+    dragging=true; startX=e.clientX; startW=sidebar.getBoundingClientRect().width;
+    handle.classList.add('dragging'); document.body.classList.add('felix-resizing');
+    try{handle.setPointerCapture(e.pointerId);}catch(_){}
+    e.preventDefault();
+  }
+  function move(e){
+    if(!dragging) return;
+    apply(startW+(e.clientX-startX),false);
+    e.preventDefault();
+  }
+  function end(){
+    if(!dragging) return; dragging=false; handle.classList.remove('dragging'); document.body.classList.remove('felix-resizing');
+    const w=sidebar.getBoundingClientRect().width; apply(w,true);
+  }
+  handle.addEventListener('pointerdown',begin);
+  handle.addEventListener('pointermove',move);
+  handle.addEventListener('pointerup',end);
+  handle.addEventListener('pointercancel',end);
+  window.addEventListener('resize',()=>{ if(!dragging) apply(sidebar.getBoundingClientRect().width,false); },{passive:true});
 })();
 </script>
+
+<style id="felix-performance-polish">
+body.felix-resizing,.felix-resizing *{cursor:col-resize!important;user-select:none!important}
+.messages,.friends{scrollbar-gutter:stable}
+@media(prefers-reduced-motion:reduce){.felix-resize-handle::after{transition:none!important}}
+</style>
 </body>
 
 <style>
@@ -5027,6 +5072,11 @@ window.playFelixNotificationSound=function(){try{const a=window.__felixNotificat
   }
   window.addEventListener('resize',ensureAllFriends,{passive:true});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(ensureAllFriends,100);});
-  setInterval(ensureAllFriends,2000);
+  // Event-driven only: avoid a permanent 2s polling loop that wastes CPU.
+  const friendsRoot=document.getElementById('friends');
+  if(friendsRoot && window.MutationObserver){
+    const observer=new MutationObserver(()=>requestAnimationFrame(ensureAllFriends));
+    observer.observe(friendsRoot,{childList:true,subtree:true});
+  }
 })();
 </script>
