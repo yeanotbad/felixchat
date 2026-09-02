@@ -715,7 +715,7 @@ app.post('/api/admin/soundboard',auth,async(req,res)=>{
     if(String(u?.username||'').toLowerCase()!=='felixchat' || String(u?.role||'').toLowerCase()!=='admin') return res.status(403).json({error:'Only @felixchat can use the soundboard.'});
     const sound=String(req.body?.sound||'');
     if(!['verity','german','anime'].includes(sound)) return res.status(400).json({error:'Unknown sound.'});
-    broadcastAll({type:'admin_sound',sound},req.uid);
+    broadcastAll({type:'admin_sound',sound});
     res.json({ok:true});
   }catch(e){res.status(500).json({error:'Could not broadcast sound.'});}
 });
