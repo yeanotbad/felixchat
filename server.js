@@ -25,6 +25,14 @@ function checkRegistrationRate(req){
   return r.count<=8;
 }
 setInterval(()=>{const t=Date.now(); for(const [key,r] of registrationRate) if(t-r.start>10*60*1000) registrationRate.delete(key);},5*60*1000).unref?.();
+// Per-challenge CAPTCHA: randomized, signed, short-lived, and single-use. No IP tracking.
+const CAPTCHA_SECRET = String(process.env.CAPTCHA_SECRET || process.env.RESEND_API_KEY || 'felix-chat-local-captcha-secret-change-me');
+const usedCaptchaTokens = new Map();
+function b64url(v){return Buffer.from(v).toString('base64url');}
+function signCaptcha(payload){const body=b64url(JSON.stringify(payload));const sig=crypto.createHmac('sha256',CAPTCHA_SECRET).update(body).digest('base64url');return body+'.'+sig;}
+function verifyCaptchaToken(token,answer){try{const parts=String(token||'').split('.');if(parts.length!==2)return false;const [body,sig]=parts;const expected=crypto.createHmac('sha256',CAPTCHA_SECRET).update(body).digest('base64url');if(sig.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))return false;const p=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));if(!p.nonce||Date.now()>Number(p.exp)||usedCaptchaTokens.has(p.nonce))return false;if(String(answer||'').trim()!==String(p.answer))return false;usedCaptchaTokens.set(p.nonce,Date.now()+120000);return true;}catch{return false;}}
+function makeCaptcha(){const a=crypto.randomInt(2,15),b=crypto.randomInt(2,15),op=['+','-','×'][crypto.randomInt(0,3)];const answer=op==='+'?a+b:op==='-'?a-b:a*b;const nonce=crypto.randomBytes(18).toString('hex'),exp=Date.now()+120000;return {question:`What is ${a} ${op} ${b}?`,token:signCaptcha({nonce,answer,exp}),expiresAt:exp};}
+setInterval(()=>{const t=Date.now();for(const [n,exp] of usedCaptchaTokens)if(exp<t)usedCaptchaTokens.delete(n);},60000).unref?.();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 const UPLOADS = path.join(__dirname, 'public', 'uploads');
@@ -395,8 +403,11 @@ app.get('/api/cloudinary-config', auth, async (_req,res)=>{
   res.json({cloudName,uploadPreset});
 });
 
+app.get('/api/captcha', (_req,res)=>res.json(makeCaptcha()));
+
 app.post('/api/register', async (req,res)=>{
   try {
+    if(!verifyCaptchaToken(req.body.captchaToken,req.body.captchaAnswer)) return res.status(400).json({error:'CAPTCHA failed or expired. Please try a new challenge.'});
     if(!checkRegistrationRate(req)) return res.status(429).json({error:'Too many signup attempts. Please try again later.'});
     // Refuse registration if the database/server is unavailable, preventing partial accounts.
     await db.execute('SELECT 1');
@@ -435,7 +446,7 @@ app.post('/api/verify-email', async (req,res)=>{
 });
 
 app.post('/api/resend-verification', async (req,res)=>{
-  try{const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:'SELECT * FROM email_verifications WHERE email=?',args:[email]});const v=r.rows[0];if(!v)return res.status(404).json({error:'No pending verification found'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'UPDATE email_verifications SET code_hash=?,expires_at=?,attempts=0 WHERE email=?',args:[hash(code,email),now()+10*60*1000,email]});await sendVerificationEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not resend code'});}
+  try{if(!verifyCaptchaToken(req.body.captchaToken,req.body.captchaAnswer))return res.status(400).json({error:'CAPTCHA failed or expired. Please try a new challenge.'});const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:'SELECT * FROM email_verifications WHERE email=?',args:[email]});const v=r.rows[0];if(!v)return res.status(404).json({error:'No pending verification found'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'UPDATE email_verifications SET code_hash=?,expires_at=?,attempts=0 WHERE email=?',args:[hash(code,email),now()+10*60*1000,email]});await sendVerificationEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not resend code'});}
 });
 
 app.post('/api/forgot-password', async (req,res)=>{try{const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:"SELECT email FROM users WHERE lower(COALESCE(email,''))=? LIMIT 1",args:[email]});if(!r.rows[0])return res.status(404).json({error:'No account was found with that email.'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'INSERT INTO password_resets(email,code_hash,expires_at,attempts,created_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0,created_at=excluded.created_at',args:[email,hash(code,email),now()+10*60*1000,0,now()]});await sendPasswordResetEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not send reset code'});}});
