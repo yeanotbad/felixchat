@@ -1677,6 +1677,52 @@ async function sendBulkGrant(){const uids=[...document.querySelectorAll('.bulk-u
     background:#080b16;
   }
 }
+
+<style id="felix-clean-ui-v2">
+:root{
+  --felix-bg:#090d18;--felix-surface:#101728;--felix-surface-2:#141e31;--felix-border:#263552;
+  --felix-text:#f4f7ff;--felix-muted:#95a3bd;--felix-accent:#7c6cff;--felix-accent-2:#35b8ff;
+  --felix-glow:rgba(124,108,255,.22);
+}
+html,body{background:var(--felix-bg);color:var(--felix-text);}
+body{overflow:hidden;}
+/* The old slider UI is intentionally hidden; resizing is done by dragging the divider. */
+.chat-size-control{display:none!important;}
+.felix-resize-handle{flex-basis:10px;width:10px;background:transparent;z-index:40;}
+.felix-resize-handle::after{width:3px;height:48px;background:rgba(148,163,184,.35);box-shadow:0 0 0 1px rgba(255,255,255,.03);}
+.felix-resize-handle:hover::after,.felix-resize-handle.dragging::after{height:78px;background:linear-gradient(180deg,var(--felix-accent),var(--felix-accent-2));box-shadow:0 0 18px var(--felix-glow);}
+.sidebar{background:linear-gradient(180deg,#0e1525,#0a101c);border-right:1px solid var(--felix-border);}
+.chat{background:linear-gradient(180deg,#0b1220,#080d17);}
+.chat-header{background:rgba(12,18,31,.88);backdrop-filter:blur(14px);}
+.btn,.icon-btn,.friend-menu-btn,.call-control{background:var(--felix-surface-2);border-color:var(--felix-border);}
+.btn:hover,.icon-btn:hover,.friend-menu-btn:hover{background:#1a2740;box-shadow:0 8px 24px rgba(0,0,0,.16);}
+.primary,.send{background:linear-gradient(135deg,var(--felix-accent),var(--felix-accent-2));box-shadow:0 8px 24px var(--felix-glow);}
+.friend{border:1px solid transparent;margin:2px 4px;transition:background .16s ease,transform .16s ease,border-color .16s ease,box-shadow .16s ease;}
+.friend:hover{border-color:#2d3d5d;background:#17233a;transform:translateX(2px);}
+.friend.active{background:linear-gradient(90deg,#182542,#131d31);border-color:#35486b;box-shadow:0 8px 22px rgba(0,0,0,.14);}
+.messages{scrollbar-gutter:stable;}
+.message{box-shadow:0 3px 14px rgba(0,0,0,.10);}
+.modal,.story-viewer,.poll-overlay,.call-overlay,.announcement-overlay,.system-status-overlay,.timeout-overlay{
+  isolation:isolate;
+}
+/* One predictable overlay stack: temporary content sits above the app, but only one full-screen layer should win. */
+.modal{z-index:60000!important;background:rgba(5,9,18,.72);backdrop-filter:blur(12px);}
+.story-viewer{z-index:55000!important;background:rgba(3,6,13,.84);backdrop-filter:blur(8px);}
+.poll-overlay{z-index:56000!important;}
+.call-overlay{z-index:70000!important;}
+.announcement-overlay{z-index:80000!important;}
+.system-status-overlay{z-index:90000!important;}
+.timeout-overlay{z-index:95000!important;}
+/* When a normal menu is open, story media must never remain visible behind it. */
+body.felix-modal-open #storyViewer{display:none!important;pointer-events:none!important;}
+body.felix-modal-open .story-strip{visibility:hidden;}
+body.felix-story-open #modal{display:none!important;pointer-events:none!important;}
+body.felix-story-open .story-strip{visibility:visible;}
+.story-viewer-box{box-shadow:0 30px 100px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.08);}
+input,textarea,select{background:#0d1525;border-color:#2a3a59;}
+input:focus,textarea:focus,select:focus{border-color:#6474ff!important;box-shadow:0 0 0 3px rgba(100,116,255,.14)!important;}
+@media(max-width:700px){.felix-resize-handle{display:none!important;}.modal{padding:10px!important;}.modal-box{border-radius:18px!important;}}
+</style>
 </style>
 </head>
 
@@ -4484,6 +4530,60 @@ body.felix-resizing,.felix-resizing *{cursor:col-resize!important;user-select:no
 .messages,.friends{scrollbar-gutter:stable}
 @media(prefers-reduced-motion:reduce){.felix-resize-handle::after{transition:none!important}}
 </style>
+
+<script id="felix-overlay-arbiter-v2">
+(function(){
+  const modal=document.getElementById('modal');
+  const story=document.getElementById('storyViewer');
+  const sync=()=>{
+    const modalOpen=!!modal && getComputedStyle(modal).display!=='none';
+    const storyOpen=!!story && getComputedStyle(story).display!=='none';
+    document.body.classList.toggle('felix-modal-open',modalOpen);
+    document.body.classList.toggle('felix-story-open',!modalOpen && storyOpen);
+  };
+  const hideStory=()=>{
+    try{ if(typeof window.closeStory==='function') window.closeStory(); }catch(_){}
+    if(story){story.style.display='none';story.style.pointerEvents='none';}
+    sync();
+  };
+  const hideModal=()=>{
+    if(modal){modal.style.display='none';modal.style.pointerEvents='none';}
+    sync();
+  };
+  window.__felixSyncOverlays=sync;
+  window.__felixCloseAllTransientOverlays=function(){hideStory();};
+  // Patch the central modal helpers so every normal menu automatically owns the screen.
+  const patch=()=>{
+    if(typeof window.openModal==='function' && !window.__felixModalPatched){
+      const original=window.openModal;
+      window.openModal=function(){ hideStory(); original.apply(this,arguments); if(modal)modal.style.pointerEvents='auto'; sync(); };
+      window.__felixModalPatched=true;
+    }
+    if(typeof window.closeModal==='function' && !window.__felixCloseModalPatched){
+      const original=window.closeModal;
+      window.closeModal=function(){ original.apply(this,arguments); if(modal)modal.style.pointerEvents='none'; sync(); };
+      window.__felixCloseModalPatched=true;
+    }
+  };
+  patch();
+  setTimeout(patch,0);setTimeout(patch,500);setTimeout(patch,1500);
+  const observer=new MutationObserver(sync);
+  if(modal)observer.observe(modal,{attributes:true,attributeFilter:['style','class']});
+  if(story)observer.observe(story,{attributes:true,attributeFilter:['style','class']});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(storyOpenNow())hideStory();else if(modalOpenNow())hideModal();}},true);
+  function storyOpenNow(){return story && getComputedStyle(story).display!=='none';}
+  function modalOpenNow(){return modal && getComputedStyle(modal).display!=='none';}
+  // Clicking a normal navigation/menu control always dismisses story first.
+  document.addEventListener('click',e=>{
+    const target=e.target.closest?.('button,a,[role="button"]');
+    if(!target || target.closest('#storyViewer')) return;
+    if(storyOpenNow() && !target.closest('.story-card')) hideStory();
+  },true);
+  window.addEventListener('resize',sync,{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(sync,80),{passive:true});
+  sync();
+})();
+</script>
 </body>
 
 <style>
