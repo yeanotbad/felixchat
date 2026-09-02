@@ -11,7 +11,6 @@ const webpush = require('web-push');
 const PORT = process.env.PORT || 3000;
 const app = express();
 // Signup abuse protection is based on the email/username being submitted, not IP.
-// This avoids blocking lots of legitimate people sharing the same school Wi-Fi.
 const registrationRate = new Map();
 function registrationKey(req){
   const email=String(req.body?.email||'').trim().toLowerCase();
@@ -22,15 +21,10 @@ function checkRegistrationRate(req){
   const key=registrationKey(req), t=Date.now(), windowMs=10*60*1000;
   let r=registrationRate.get(key);
   if(!r || t-r.start>windowMs) r={start:t,count:0};
-  r.count++;
-  registrationRate.set(key,r);
-  // Normal users get plenty of room; only rapid repeated attempts for the same
-  // email/username are temporarily slowed down.
+  r.count++; registrationRate.set(key,r);
   return r.count<=8;
 }
 setInterval(()=>{const t=Date.now(); for(const [key,r] of registrationRate) if(t-r.start>10*60*1000) registrationRate.delete(key);},5*60*1000).unref?.();
-
-
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 const UPLOADS = path.join(__dirname, 'public', 'uploads');
@@ -362,6 +356,25 @@ function broadcast(uid, payload) {
   for (const ws of set) if (ws.readyState === WebSocket.OPEN) ws.send(data);
 }
 function pair(a,b,payload){ broadcast(a,payload); broadcast(b,payload); }
+const DISPOSABLE_DOMAINS=new Set(['10minutemail.com','10minutemail.net','guerrillamail.com','guerrillamail.info','mailinator.com','tempmail.com','temp-mail.org','throwawaymail.com','yopmail.com','getnada.com','dispostable.com']);
+function isDisposableEmail(email){ const domain=String(email).toLowerCase().split('@').pop(); return DISPOSABLE_DOMAINS.has(domain); }
+async function sendPasswordResetEmail(email, code){
+  const key=String(process.env.RESEND_API_KEY||'').trim();
+  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
+  if(!key) throw new Error('Email sending is not configured.');
+  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat password reset code',html:`<h2>Reset your Felix Chat password</h2><p>Your 6-digit reset code is:</p><h1 style=\"letter-spacing:6px\">${code}</h1><p>This code expires in 10 minutes.</p>`})});
+  if(!r.ok) throw new Error('Could not send reset email.');
+}
+async function sendVerificationEmail(email, code){
+  const key=String(process.env.RESEND_API_KEY||'').trim();
+  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
+  if(!key) throw new Error('Email sending is not configured. Add RESEND_API_KEY and FROM_EMAIL in Render.');
+  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat verification code',html:`<h2>Verify your Felix Chat account</h2><p>Your verification code is:</p><h1 style=\"letter-spacing:6px\">${code}</h1><p>This code expires in 10 minutes.</p>`})});
+  if(!r.ok){const txt=await r.text();throw new Error('Email provider error: '+txt.slice(0,160));}
+}
+async function equippedTagsFor(uid){
+  try{const r=await db.execute({sql:`SELECT c.id,c.name,c.rarity,c.value FROM equipped_tags e JOIN collectibles c ON c.id=e.collectible_id WHERE e.uid=? ORDER BY e.position LIMIT 5`,args:[uid]});return r.rows||[];}catch(_){return [];}
+}
 function broadcastAll(payload, excludeUid=null) {
   const data=JSON.stringify(payload);
   for(const [targetUid,set] of sockets){
@@ -369,19 +382,7 @@ function broadcastAll(payload, excludeUid=null) {
     for(const ws of set) if(ws.readyState===WebSocket.OPEN) ws.send(data);
   }
 }
-
-function broadcastPresence(uid, online){
-  broadcastAll({type:'presence_update',uid:String(uid),online:!!online,lastSeen:Date.now()});
-}
-
-
-async function equippedTagsFor(uid){
-  try{
-    const r=await db.execute({sql:`SELECT c.id,c.name,c.rarity,c.value FROM equipped_tags e JOIN collectibles c ON c.id=e.collectible_id WHERE e.uid=? ORDER BY e.position LIMIT 5`,args:[uid]});
-    return r.rows||[];
-  }catch(_){ return []; }
-}
-
+function broadcastPresence(uid, online){ broadcastAll({type:'presence_update',uid:String(uid),online:!!online,lastSeen:Date.now()}); }
 function publicUser(u, online=false){
   return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', verified:Number(u.verified||0)===1, online, lastSeen:u.last_seen || 0, streak:u.streak || 0, timeoutUntil:Number(u.timeout_until||0), timeoutBy:u.timeout_by || '' };
 }
@@ -393,25 +394,6 @@ app.get('/api/cloudinary-config', auth, async (_req,res)=>{
   if(!cloudName||!uploadPreset) return res.status(503).json({error:'Cloudinary is not configured on the server.'});
   res.json({cloudName,uploadPreset});
 });
-
-const DISPOSABLE_DOMAINS=new Set(['10minutemail.com','10minutemail.net','guerrillamail.com','guerrillamail.info','mailinator.com','tempmail.com','temp-mail.org','throwawaymail.com','yopmail.com','getnada.com','dispostable.com']);
-function isDisposableEmail(email){ const domain=String(email).toLowerCase().split('@').pop(); return DISPOSABLE_DOMAINS.has(domain); }
-
-async function sendPasswordResetEmail(email, code){
-  const key=String(process.env.RESEND_API_KEY||'').trim();
-  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
-  if(!key) throw new Error('Email sending is not configured.');
-  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat password reset code',html:`<h2>Reset your Felix Chat password</h2><p>Your 6-digit reset code is:</p><h1 style="letter-spacing:6px">${code}</h1><p>This code expires in 10 minutes.</p>`})});
-  if(!r.ok) throw new Error('Could not send reset email.');
-}
-
-async function sendVerificationEmail(email, code){
-  const key=String(process.env.RESEND_API_KEY||'').trim();
-  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
-  if(!key) throw new Error('Email sending is not configured. Add RESEND_API_KEY and FROM_EMAIL in Render.');
-  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat verification code',html:`<h2>Verify your Felix Chat account</h2><p>Your verification code is:</p><h1 style="letter-spacing:6px">${code}</h1><p>This code expires in 10 minutes.</p>`})});
-  if(!r.ok){const txt=await r.text();throw new Error('Email provider error: '+txt.slice(0,160));}
-}
 
 app.post('/api/register', async (req,res)=>{
   try {
@@ -477,7 +459,7 @@ app.post('/api/logout',auth,async(req,res)=>{const token=req.headers.authorizati
 
 app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
-  const fr=await db.execute({sql:`SELECT DISTINCT u.* FROM users u JOIN friendships f ON ((f.friend_id=u.uid AND f.user_id=?) OR (f.user_id=u.uid AND f.friend_id=?)) WHERE f.status='accepted' AND u.uid<>? ORDER BY u.username`,args:[req.uid,req.uid,req.uid]});
+  const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
   const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(x.uid); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
   res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',friends,requests:incoming.rows.map(x=>publicUser(x))});
@@ -536,7 +518,7 @@ app.post('/api/profile/avatar',auth,async(req,res)=>{
 });
 
 app.get('/api/friends',auth,async(req,res)=>{
-  const r=await db.execute({sql:`SELECT DISTINCT u.* FROM friendships f JOIN users u ON ((f.friend_id=u.uid AND f.user_id=?) OR (f.user_id=u.uid AND f.friend_id=?)) WHERE f.status='accepted' AND u.uid<>? ORDER BY lower(u.username)`,args:[req.uid,req.uid,req.uid]});
+  const r=await db.execute({sql:`SELECT u.* FROM friendships f JOIN users u ON u.uid=f.friend_id WHERE f.user_id=? AND f.status='accepted' ORDER BY lower(u.username)`,args:[req.uid]});
   const out=[]; for(const u of r.rows){const f=publicUser(u,(sockets.get(u.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(u.uid); out.push(f);}
   res.json(out);
 });
@@ -544,14 +526,14 @@ app.get('/api/friends',auth,async(req,res)=>{
 app.post('/api/friends/request',auth,async(req,res)=>{
   const username=clean(req.body.username).toLowerCase(); const r=await db.execute({sql:'SELECT * FROM users WHERE username=?',args:[username]}); const target=r.rows[0];
   if(!target)return res.status(404).json({error:'User not found'}); if(target.uid===req.uid)return res.status(400).json({error:"You can't add yourself"}); if(await blocked(req.uid,target.uid)||await blocked(target.uid,req.uid))return res.status(403).json({error:'Friend request unavailable'});
-  const f=await db.execute({sql:'SELECT user_id,friend_id,status FROM friendships WHERE (user_id=? AND friend_id=?) OR (user_id=? AND friend_id=?)',args:[req.uid,target.uid,target.uid,req.uid]}); if(f.rows.some(x=>x.status==='accepted'))return res.json({ok:true,message:'Already friends'}); if(f.rows.some(x=>x.status==='pending'))return res.json({ok:true,message:'Friend request already sent'});
+  const f=await db.execute({sql:'SELECT status FROM friendships WHERE user_id=? AND friend_id=?',args:[req.uid,target.uid]}); if(f.rows[0]?.status==='accepted')return res.json({ok:true,message:'Already friends'});
   await db.batch([
     {sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='pending'`,args:[req.uid,target.uid,'pending',now()]},
     {sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO NOTHING`,args:[target.uid,req.uid,'none',now()]}
   ]); broadcast(target.uid,{type:'friend_request',from:(await getUser(req.uid)).username,uid:req.uid});res.json({ok:true});
 });
 
-app.post('/api/friends/accept',auth,async(req,res)=>{const other=req.body.uid; if(!await getUser(other))return res.status(404).json({error:'User not found'}); await db.batch([{sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[other,req.uid,'accepted',now()]},{sql:`INSERT INTO friendships(user_id,friend_id,status,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,friend_id) DO UPDATE SET status='accepted'`,args:[req.uid,other,'accepted',now()]}]); pair(req.uid,other,{type:'friend_accepted'});res.json({ok:true});});
+app.post('/api/friends/accept',auth,async(req,res)=>{const other=req.body.uid; if(!await getUser(other))return res.status(404).json({error:'User not found'}); await db.batch([{sql:`UPDATE friendships SET status='accepted' WHERE user_id=? AND friend_id=?`,args:[other,req.uid]},{sql:`UPDATE friendships SET status='accepted' WHERE user_id=? AND friend_id=?`,args:[req.uid,other]}]); pair(req.uid,other,{type:'friend_accepted'});res.json({ok:true});});
 app.post('/api/friends/decline',auth,async(req,res)=>{await db.execute({sql:`UPDATE friendships SET status='declined' WHERE user_id=? AND friend_id=?`,args:[req.body.uid,req.uid]});res.json({ok:true});});
 app.delete('/api/friends/:uid',auth,async(req,res)=>{await db.batch([{sql:'DELETE FROM friendships WHERE user_id=? AND friend_id=?',args:[req.uid,req.params.uid]},{sql:'DELETE FROM friendships WHERE user_id=? AND friend_id=?',args:[req.params.uid,req.uid]}]);res.json({ok:true});});
 app.post('/api/block/:uid',auth,async(req,res)=>{await db.execute({sql:'INSERT OR IGNORE INTO blocks(uid,blocked_uid,created_at) VALUES(?,?,?)',args:[req.uid,req.params.uid,now()]});res.json({ok:true});});
@@ -719,15 +701,13 @@ async function requireModerator(req,res){
 app.post('/api/admin/soundboard',auth,async(req,res)=>{
   try{
     const u=await getUser(req.uid);
-    if(String(u?.username||'').toLowerCase()!=='felixchat' || String(u?.role||'').toLowerCase()!=='admin')
-      return res.status(403).json({error:'Only @felixchat can use the soundboard.'});
+    if(String(u?.username||'').toLowerCase()!=='felixchat' || String(u?.role||'').toLowerCase()!=='admin') return res.status(403).json({error:'Only @felixchat can use the soundboard.'});
     const sound=String(req.body?.sound||'');
     if(!['verity','german','anime'].includes(sound)) return res.status(400).json({error:'Unknown sound.'});
     broadcastAll({type:'admin_sound',sound},req.uid);
     res.json({ok:true});
   }catch(e){res.status(500).json({error:'Could not broadcast sound.'});}
 });
-
 app.get('/api/admin/status',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   res.json({admin:u?.username==='felixchat' && String(u.role||'')==='admin', moderator:['admin','mod'].includes(String(u?.role||'').toLowerCase()), role:u?.role||'member'});
@@ -1000,11 +980,7 @@ app.delete('/api/groups/:gid/leave',auth,async(req,res)=>{
   }
 });
 
-wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());
-        const wasOffline=(sockets.get(uid).size===0);
-        sockets.get(uid).add(ws);
-        if(wasOffline) broadcastPresence(uid,true);
-        ws.send(JSON.stringify({type:'ready'}));
+wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set()); const wasOffline=(sockets.get(uid).size===0); sockets.get(uid).add(ws); if(wasOffline) broadcastPresence(uid,true); ws.send(JSON.stringify({type:'ready'}));
         try { const status=await getSystemStatus(); const authedUser=await getUser(uid); if(status && String(authedUser?.username||'').toLowerCase()!=='felixchat') ws.send(JSON.stringify({type:'system_status',status})); } catch(e) {}
         try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(!(a.audience==='all'||ts.includes(uid)))continue;const seen=await db.execute({sql:'SELECT 1 FROM announcement_views WHERE announcement_id=? AND uid=?',args:[a.id,uid]});if(seen.rows.length)continue;const announcement={id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username};ws.send(JSON.stringify({type:'announcement',announcement}));await db.execute({sql:'INSERT OR IGNORE INTO announcement_views(announcement_id,uid,viewed_at) VALUES(?,?,?)',args:[a.id,uid,now()]});break;}}catch(e){}
         return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});
@@ -1016,18 +992,7 @@ wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JS
         if(uid&&m.type==='live_location'&&m.to&&await areFriends(uid,m.to)){
           const p=m.payload||{}; const lat=Number(p.lat),lon=Number(p.lon);
           if(Number.isFinite(lat)&&Number.isFinite(lon)) broadcast(m.to,{type:'live_location',from:uid,payload:{lat,lon,accuracy:Number(p.accuracy)||0,active:p.active!==false,at:Date.now()}});
-        }if(uid&&m.type==='group_typing'&&m.gid&&await groupMember(m.gid,uid))await broadcastGroup(m.gid,{type:'group_typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',async()=>{
-  if(!uid)return;
-  const set=sockets.get(uid);
-  if(!set)return;
-  set.delete(ws);
-  if(!set.size){
-    sockets.delete(uid);
-    const seen=Date.now();
-    try{await db.execute({sql:'UPDATE users SET last_seen=? WHERE uid=?',args:[seen,uid]});}catch(_){}
-    broadcastPresence(uid,false);
-  }
-});});
+        }if(uid&&m.type==='group_typing'&&m.gid&&await groupMember(m.gid,uid))await broadcastGroup(m.gid,{type:'group_typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',async()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size){sockets.delete(uid);const seen=Date.now();try{await db.execute({sql:'UPDATE users SET last_seen=? WHERE uid=?',args:[seen,uid]});}catch(_){} broadcastPresence(uid,false);}});});
 
 setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM polls WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
