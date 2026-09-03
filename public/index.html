@@ -1396,6 +1396,22 @@ button:focus-visible,input:focus-visible{
 /* Equipped collectible tags belong in the Friends menu, not inside chat message bubbles. */
 .friend-info{min-width:0;flex:1}.friend-name-row{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.friend-official-badges{display:inline-flex;gap:3px;align-items:center}.friend-equipped-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;max-width:100%;overflow:hidden}.friend-equipped-tags .felix-tag{margin:0;font-size:10px;line-height:1.2;white-space:nowrap}.message-sender .felix-tag,.message .felix-tag{display:none!important}
 .captcha-box{padding:18px;border:1px solid #2c3854;border-radius:16px;background:#11192c;margin:12px 0;text-align:center}.captcha-question{font-size:22px;font-weight:800;margin:8px 0 14px}.captcha-note{font-size:12px;color:#9aa8c2}.captcha-input{text-align:center;font-size:20px;max-width:220px}
+
+/* Felix Chat restored colour palette */
+:root{--bg:#0b1020;--panel:#111936;--panel2:#172142;--line:#2b3b66;--text:#f7f9ff;--muted:#a8b4d1;--blue:#4f8cff;--purple:#7c5cff;--hover:#202e55;}
+body{background:var(--bg);color:var(--text)}
+.sidebar{background:#0f1730;border-color:var(--line)}
+.profile,.btn,.request{background:var(--panel2);border-color:var(--line)}
+.friend:hover,.friend.active{background:var(--hover)}
+.chat-header,.composer{border-color:var(--line)}
+.message{background:#17213d}
+.message.mine,.primary{background:linear-gradient(135deg,var(--purple),var(--blue))}
+.message-input,.input{background:#0d1530;border-color:var(--line);color:var(--text)}
+.send{background:linear-gradient(135deg,var(--purple),var(--blue))}
+.modal-box{background:#111936;border-color:var(--line)}
+.small,.empty{color:var(--muted)}
+.icon-btn{background:#17213d;border-color:var(--line)}
+
 </style>
 
 <style id="felix-layout-upgrade">
