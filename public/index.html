@@ -1025,31 +1025,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-seri
   --good:#34d399;
   --danger:#fb7185;
   --shadow:0 14px 40px rgba(0,0,0,.28);
-  --felix-sidebar-width:300px;
 }
-
-/* Adjustable desktop chat/friends split */
-@media(min-width:701px){
-  .sidebar{width:var(--felix-sidebar-width)!important;flex:0 0 var(--felix-sidebar-width)!important;transition:width .22s ease,flex-basis .22s ease;}
-  .chat{width:calc(100% - var(--felix-sidebar-width));transition:width .22s ease;}
-}
-
-
-/* Grab-to-resize divider: the chat/friends boundary is directly draggable. */
-.felix-resize-handle{display:flex;flex:0 0 8px;width:8px;align-items:center;justify-content:center;cursor:col-resize;touch-action:none;user-select:none;position:relative;z-index:20;background:transparent;transition:background .18s ease}
-.felix-resize-handle::after{content:'';width:3px;height:42px;border-radius:999px;background:rgba(148,163,184,.28);transition:transform .18s ease,background .18s ease,height .18s ease}
-.felix-resize-handle:hover::after,.felix-resize-handle.dragging::after{height:64px;transform:scaleX(1.35);background:var(--accent)}
-.felix-resize-handle:hover,.felix-resize-handle.dragging{background:rgba(139,92,246,.08)}
-@media(max-width:700px){.felix-resize-handle{display:none}}
-
-.chat-size-control{
-  display:none; /* replaced by the grab handle */align-items:center;gap:9px;padding:8px 10px;border:1px solid rgba(139,92,246,.18);
-  background:rgba(17,21,40,.72);border-radius:12px;
-}
-.chat-size-control label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:700}
-.chat-size-control input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
-.chat-size-value{min-width:34px;text-align:right;font-size:11px;color:var(--text);font-weight:800}
-@media(max-width:700px){.chat-size-control{display:none}}
 
 *{box-sizing:border-box}
 
@@ -1392,26 +1368,6 @@ button:focus-visible,input:focus-visible{
  .modal-box{max-width:100%!important;max-height:calc(100dvh - 16px)!important;overflow:auto;}
  img,video{max-width:100%;}
 }
-
-/* Equipped collectible tags belong in the Friends menu, not inside chat message bubbles. */
-.friend-info{min-width:0;flex:1}.friend-name-row{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.friend-official-badges{display:inline-flex;gap:3px;align-items:center}.friend-equipped-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;max-width:100%;overflow:hidden}.friend-equipped-tags .felix-tag{margin:0;font-size:10px;line-height:1.2;white-space:nowrap}.message-sender .felix-tag,.message .felix-tag{display:none!important}
-.captcha-box{padding:18px;border:1px solid #2c3854;border-radius:16px;background:#11192c;margin:12px 0;text-align:center}.captcha-question{font-size:22px;font-weight:800;margin:8px 0 14px}.captcha-note{font-size:12px;color:#9aa8c2}.captcha-input{text-align:center;font-size:20px;max-width:220px}
-
-/* Felix Chat restored colour palette */
-:root{--bg:#0b1020;--panel:#111936;--panel2:#172142;--line:#2b3b66;--text:#f7f9ff;--muted:#a8b4d1;--blue:#4f8cff;--purple:#7c5cff;--hover:#202e55;}
-body{background:var(--bg);color:var(--text)}
-.sidebar{background:#0f1730;border-color:var(--line)}
-.profile,.btn,.request{background:var(--panel2);border-color:var(--line)}
-.friend:hover,.friend.active{background:var(--hover)}
-.chat-header,.composer{border-color:var(--line)}
-.message{background:#17213d}
-.message.mine,.primary{background:linear-gradient(135deg,var(--purple),var(--blue))}
-.message-input,.input{background:#0d1530;border-color:var(--line);color:var(--text)}
-.send{background:linear-gradient(135deg,var(--purple),var(--blue))}
-.modal-box{background:#111936;border-color:var(--line)}
-.small,.empty{color:var(--muted)}
-.icon-btn{background:#17213d;border-color:var(--line)}
-
 </style>
 
 <style id="felix-layout-upgrade">
@@ -1509,12 +1465,7 @@ async function sendBulkGrant(){const uids=[...document.querySelectorAll('.bulk-u
      grid.dataset.columnMajor='1';
    });
  }
- makeTwoVerticalColumns();
- const root=document.body;
- if(root && window.MutationObserver){
-   const observer=new MutationObserver(()=>requestAnimationFrame(makeTwoVerticalColumns));
-   observer.observe(root,{childList:true,subtree:true});
- }
+ setInterval(makeTwoVerticalColumns,250);
 })();
 </script>
 
@@ -1624,136 +1575,6 @@ async function sendBulkGrant(){const uids=[...document.querySelectorAll('.bulk-u
 <meta name="theme-color" content="#080914">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-<style id="mobile-friends-final-fix">
-@media (max-width:700px){
-  html,body{
-    width:100%;
-    min-height:100%;
-    height:auto;
-    margin:0;
-    overflow-x:hidden;
-    background:#0d1220;
-  }
-  body{min-height:100dvh;}
-  .app{
-    display:block;
-    width:100%;
-    min-height:100dvh;
-    height:auto;
-    overflow:visible;
-    background:#0d1220;
-  }
-  .sidebar{
-    display:flex;
-    flex-direction:column;
-    width:100%;
-    min-height:100dvh;
-    height:auto;
-    padding:calc(10px + env(safe-area-inset-top)) 10px calc(18px + env(safe-area-inset-bottom));
-    gap:9px;
-    overflow:visible;
-    background:#0d1220;
-  }
-  /* Keep the friends area large and easy to use on phones. */
-  #friends.friends{
-    display:block;
-    width:100%;
-    min-height:calc(100dvh - 220px);
-    max-height:none;
-    overflow:visible;
-    flex:0 0 auto;
-  }
-  .friends + div[style*="flex:1"]{display:none!important;}
-  .friend{
-    width:100%;
-    min-height:64px;
-    padding:11px;
-    justify-content:flex-start;
-  }
-  .friend-info{display:block!important;min-width:0;overflow:hidden;}
-  .snap-toolbar,
-  .snap-toggle,
-  .snap-search,
-  .sidebar > .btn{
-    flex-shrink:0;
-  }
-  /* Never leave a black unused half-screen behind the friends list. */
-  .sidebar::after{content:"";display:block;min-height:1px;}
-  body.mobile-chat-open{
-    overflow:hidden;
-    background:#080b16;
-  }
-  body.mobile-chat-open .sidebar{display:none!important;}
-  body.mobile-chat-open .chat{
-    display:flex!important;
-    width:100%;
-    height:100dvh;
-    min-height:100dvh;
-    background:#080b16;
-  }
-}
-
-<style id="felix-clean-ui-v2">
-:root{
-  --felix-bg:#090d18;--felix-surface:#101728;--felix-surface-2:#141e31;--felix-border:#263552;
-  --felix-text:#f4f7ff;--felix-muted:#95a3bd;--felix-accent:#7c6cff;--felix-accent-2:#35b8ff;
-  --felix-glow:rgba(124,108,255,.22);
-}
-html,body{background:var(--felix-bg);color:var(--felix-text);}
-body{overflow:hidden;}
-/* The old slider UI is intentionally hidden; resizing is done by dragging the divider. */
-.chat-size-control{display:none!important;}
-.felix-resize-handle{flex-basis:10px;width:10px;background:transparent;z-index:40;}
-.felix-resize-handle::after{width:3px;height:48px;background:rgba(148,163,184,.35);box-shadow:0 0 0 1px rgba(255,255,255,.03);}
-.felix-resize-handle:hover::after,.felix-resize-handle.dragging::after{height:78px;background:linear-gradient(180deg,var(--felix-accent),var(--felix-accent-2));box-shadow:0 0 18px var(--felix-glow);}
-.sidebar{background:linear-gradient(180deg,#0e1525,#0a101c);border-right:1px solid var(--felix-border);}
-.chat{background:linear-gradient(180deg,#0b1220,#080d17);}
-.chat-header{background:rgba(12,18,31,.88);backdrop-filter:blur(14px);}
-.btn,.icon-btn,.friend-menu-btn,.call-control{background:var(--felix-surface-2);border-color:var(--felix-border);}
-.btn:hover,.icon-btn:hover,.friend-menu-btn:hover{background:#1a2740;box-shadow:0 8px 24px rgba(0,0,0,.16);}
-.primary,.send{background:linear-gradient(135deg,var(--felix-accent),var(--felix-accent-2));box-shadow:0 8px 24px var(--felix-glow);}
-.friend{border:1px solid transparent;margin:2px 4px;transition:background .16s ease,transform .16s ease,border-color .16s ease,box-shadow .16s ease;}
-.friend:hover{border-color:#2d3d5d;background:#17233a;transform:translateX(2px);}
-.friend.active{background:linear-gradient(90deg,#182542,#131d31);border-color:#35486b;box-shadow:0 8px 22px rgba(0,0,0,.14);}
-.messages{scrollbar-gutter:stable;}
-.message{box-shadow:0 3px 14px rgba(0,0,0,.10);}
-.modal,.story-viewer,.poll-overlay,.call-overlay,.announcement-overlay,.system-status-overlay,.timeout-overlay{
-  isolation:isolate;
-}
-/* One predictable overlay stack: temporary content sits above the app, but only one full-screen layer should win. */
-.modal{z-index:60000!important;background:rgba(5,9,18,.72);backdrop-filter:blur(12px);}
-.story-viewer{z-index:55000!important;background:rgba(3,6,13,.84);backdrop-filter:blur(8px);}
-.poll-overlay{z-index:56000!important;}
-.call-overlay{z-index:70000!important;}
-.announcement-overlay{z-index:80000!important;}
-.system-status-overlay{z-index:90000!important;}
-.timeout-overlay{z-index:95000!important;}
-/* When a normal menu is open, story media must never remain visible behind it. */
-body.felix-modal-open #storyViewer{display:none!important;pointer-events:none!important;}
-body.felix-modal-open .story-strip{visibility:hidden;}
-body.felix-story-open #modal{display:none!important;pointer-events:none!important;}
-body.felix-story-open .story-strip{visibility:visible;}
-.story-viewer-box{box-shadow:0 30px 100px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.08);}
-input,textarea,select{background:#0d1525;border-color:#2a3a59;}
-input:focus,textarea:focus,select:focus{border-color:#6474ff!important;box-shadow:0 0 0 3px rgba(100,116,255,.14)!important;}
-@media(max-width:700px){.felix-resize-handle{display:none!important;}.modal{padding:10px!important;}.modal-box{border-radius:18px!important;}}
-</style>
-</style>
-
-<style id="felix-white-text-fix">
-html, body { color:#fff !important; }
-p, span, div, label, small, strong, b, h1, h2, h3, h4, h5, h6,
-.username, .name, .friend-name, .message, .bio, .title, .subtitle {
-  color:#fff !important;
-}
-input, textarea, select { color:#fff !important; background:#1d2330 !important; }
-input::placeholder, textarea::placeholder { color:#c7cfda !important; opacity:1 !important; }
-button, .btn, .button { color:#fff !important; }
-.muted, .secondary, .timestamp, .time { color:#c7cfda !important; }
-[style*="color: black"], [style*="color:black"] { color:#fff !important; }
-</style>
-
 </head>
 
 <body>
@@ -1788,12 +1609,6 @@ You
 
 </div>
 
-</div>
-
-<div class="chat-size-control" title="Adjust the chat and friends panel sizes">
-  <label for="chatSizeSlider">Chat size</label>
-  <input id="chatSizeSlider" type="range" min="25" max="75" value="55" step="1" aria-label="Chat size">
-  <span id="chatSizeValue" class="chat-size-value">55%</span>
 </div>
 
 <button class="btn notification-bell" onclick="showNotifications()" title="Notifications">🔔 Notifications <span id="notificationBadge" class="notification-badge">0</span></button>
@@ -1859,8 +1674,6 @@ Log Out
 </button>
 
 </aside>
-
-<div id="felixResizeHandle" class="felix-resize-handle" role="separator" aria-label="Resize friends and chat panels" aria-orientation="vertical" title="Drag to resize"></div>
 
 <main class="chat">
 
@@ -1982,8 +1795,6 @@ return (name || "?")
 
 function openModal(html){
 
-if(typeof window.closeStory==='function') window.closeStory();
-
 $("modalBox").innerHTML =
 html;
 
@@ -2019,8 +1830,6 @@ options.headers.Authorization =
 
 }
 
-// Friends/account data must never come from a stale tablet/PWA cache.
-options.cache = 'no-store';
 const response =
 await fetch(API + url,options);
 
@@ -2030,12 +1839,10 @@ await response.json()
 
 if(!response.ok){
 
-const error = new Error(
+throw new Error(
 data.error ||
 "Something went wrong"
 );
-error.status = response.status;
-throw error;
 
 }
 
@@ -2057,16 +1864,7 @@ openModal(`
 <input
 id="username"
 class="input"
-placeholder="Username or Email"
-/>
-
-<br><br>
-
-<input
-id="email"
-class="input"
-type="email"
-placeholder="Email (required to create an account)"
+placeholder="Username"
 />
 
 <br><br>
@@ -2094,26 +1892,55 @@ onclick="login()"
 Log In
 </button>
 
-</div><br><button class="btn" onclick="forgotPassword()">Forgot Password?</button>
+</div>
 
 `);
 
 }
 
 
-async function forgotPassword(){const email=prompt('Enter the email linked to your Felix Chat account:');if(!email)return;try{await api('/forgot-password',{method:'POST',body:JSON.stringify({email})});openModal(`<h2>🔐 Reset Password</h2><p>Enter the 6-digit code sent to your email.</p><input id="resetCode" class="input" inputmode="numeric" maxlength="6" placeholder="6-digit code"><br><br><input id="resetPassword" class="input" type="password" placeholder="New password"><br><br><button class="btn primary" onclick="finishPasswordReset('${email.replace(/'/g, "\'")}')">Reset Password</button>`);}catch(e){alert(e.message)}}
-async function finishPasswordReset(email){try{await api('/reset-password',{method:'POST',body:JSON.stringify({email,code:$('resetCode').value,password:$('resetPassword').value})});alert('Password changed! You can now log in.');closeModal();loginScreen();}catch(e){alert(e.message)}}
+async function register(){
 
-let captchaContext=null,captchaChallenge=null;
-async function getCaptcha(){captchaChallenge=await api('/captcha');return captchaChallenge;}
-async function showCaptcha(context){captchaContext=context;try{const c=await getCaptcha();openModal(`<h2>🛡️ Verify you're not a bot</h2><p class="captcha-note">A new challenge is generated every time.</p><div class="captcha-box"><div class="captcha-question">${escapeHtml(c.question)}</div><input id="captchaAnswer" class="input captcha-input" inputmode="numeric" autocomplete="off" placeholder="Answer"><br><br><button class="btn" onclick="refreshCaptcha()">↻ New challenge</button></div><div class="row"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="submitCaptcha()">Verify</button></div>`);setTimeout(()=>$("captchaAnswer")?.focus(),50);}catch(e){alert('Could not load the bot check. Please try again.');}}
-async function refreshCaptcha(){try{const c=await getCaptcha();const box=document.querySelector('.captcha-question');const input=$("captchaAnswer");if(box)box.textContent=c.question;if(input){input.value='';input.focus();}}catch(e){alert('Could not refresh the challenge.');}}
-async function submitCaptcha(){const answer=$("captchaAnswer")?.value.trim();if(!answer)return alert('Enter the CAPTCHA answer.');const c=captchaChallenge;if(!c)return refreshCaptcha();const ctx=captchaContext;closeModal();captchaContext=null;captchaChallenge=null;if(ctx==='register')return registerWithCaptcha(c.token,answer);if(ctx?.startsWith('resend:'))return resendEmailCode(ctx.slice(7),c.token,answer);}
-async function register(){await showCaptcha('register');}
-async function registerWithCaptcha(captchaToken,captchaAnswer){try{const data=await api("/register",{method:"POST",body:JSON.stringify({username:$("username").value,email:$("email").value,password:$("password").value,captchaToken,captchaAnswer})});if(data.needsVerification){const email=$("email").value.trim();openModal(`<h2>📧 Verify your email</h2><p>We sent a 6-digit code to <b>${escapeHtml(email)}</b>.</p><input id="verifyCode" class="input" inputmode="numeric" maxlength="6" placeholder="6-digit code"><br><br><button class="btn primary" onclick="verifyEmailCode('${email.replace(/'/g,"\\'")}')">Verify Email</button> <button class="btn" onclick="showCaptcha('resend:${email.replace(/'/g,"\\'")}')">Resend Code</button>`);}}catch(error){alert(error.message);}}
-async function verifyEmailCode(email){try{const data=await api('/verify-email',{method:'POST',body:JSON.stringify({email,code:$("verifyCode").value})});token=data.token;localStorage.setItem('felix_token',token);closeModal();loadUser().then(()=>showDeviceChoiceIfNeeded());}catch(error){alert(error.message);}}
-async function resendEmailCode(email,captchaToken,captchaAnswer){if(!captchaToken)return showCaptcha('resend:'+email);try{await api('/resend-verification',{method:'POST',body:JSON.stringify({email,captchaToken,captchaAnswer})});alert('A new verification code was sent.');}catch(error){alert(error.message);}}
+try{
 
+const data =
+await api(
+"/register",
+{
+method:"POST",
+body:JSON.stringify({
+
+username:
+$("username").value,
+
+password:
+$("password").value
+
+})
+}
+);
+
+token =
+data.token;
+
+localStorage.setItem(
+"felix_token",
+token
+);
+
+closeModal();
+
+loadUser().then(()=>showDeviceChoiceIfNeeded());
+
+}
+
+catch(error){
+
+alert(error.message);
+
+}
+
+}
 
 
 async function login(){
@@ -2215,7 +2042,7 @@ async function loadUser(){
 try{
 
 me =
-await api("/me?fresh="+Date.now(),{cache:"no-store"});
+await api("/me");
 if(Number(me.timeoutUntil||0)>Date.now()) showTimeout(me.timeoutUntil,me.timeoutBy); else clearTimeoutOverlay();
 
 $("myName").textContent =
@@ -2229,39 +2056,20 @@ connectSocket();
 
 }
 
-catch(error){
+catch{
 
-// Do NOT log users out because of a temporary network/database error.
-// Only remove the saved session when the server explicitly says the token is invalid.
-if(error && (error.status===401 || error.status===403)){
-  localStorage.removeItem("felix_token");
-  token = null;
-  loginScreen();
-} else {
-  console.warn("Could not refresh account data; keeping the user logged in.", error);
-  // Retry once shortly in case Render/Turso was temporarily waking up.
-  if(token) setTimeout(()=>loadUser(), 3000);
-}
+localStorage.removeItem(
+"felix_token"
+);
+
+token = null;
+
+loginScreen();
 
 }
 
 }
 
-
-
-/* FELIX_FRIENDS_SYNC_V2: tablet-safe friend/presence recovery */
-setInterval(async()=>{
-  if(!token || !me) return;
-  try{
-    const latest=await api('/me?fresh='+Date.now(),{cache:'no-store'});
-    if(latest && Array.isArray(latest.friends)){
-      const oldActive=activeFriend?.uid;
-      me=latest;
-      if(oldActive) activeFriend=me.friends.find(f=>String(f.uid)===String(oldActive))||activeFriend;
-      renderFriends();
-    }
-  }catch(_){}
-},15000);
 
 /* FRIEND LIST */
 
@@ -2297,10 +2105,9 @@ element.innerHTML = `
 
 <div class="friend-info">
 
-<b class="profile-link friend-name-row">
-@${escapeHtml(friend.username)}<span class="friend-official-badges">${roleBadgeHTML(friend.role,friend.username,friend.verified)}</span>${Number(friend.streak||0)>0 ? `<span class="streak-badge active">🔥 ${Number(friend.streak)}</span>` : ''}
+<b class="profile-link">
+@${friend.username}${friend.verified ? '<span class="verified-tick">✓</span>' : ''}${Number(friend.streak||0)>0 ? `<span class="streak-badge active">🔥 ${Number(friend.streak)}</span>` : ''}
 </b>
-<div class="friend-equipped-tags">${(friend.equippedTags||[]).slice(0,5).map(t=>`<span class="felix-tag ${rarityClass(t.rarity)}">${escapeHtml(t.name)}</span>`).join('')}</div>
 
 <div class="small">
 
@@ -2557,8 +2364,6 @@ alert(error.message);
 /* SELECT FRIEND */
 
 async function selectFriend(friend){
-
-if(typeof window.closeStory==='function') window.closeStory();
 
 if(lastLocationTarget!==friend.uid) stopLiveLocation();
 activeFriend =
@@ -2964,25 +2769,6 @@ event => {
 const message =
 JSON.parse(event.data);
 
-if(message.type==='presence_update'){
-  const changedUid=String(message.uid||'');
-  if(me && Array.isArray(me.friends)){
-    let changed=false;
-    me.friends.forEach(f=>{
-      if(String(f.uid)===changedUid){
-        f.online=!!message.online;
-        f.lastSeen=message.lastSeen||Date.now();
-        changed=true;
-      }
-    });
-    if(changed && typeof renderFriends==='function') renderFriends();
-  }
-  return;
-}
-if(message.type === "admin_sound"){
-  if(typeof playFelixAdminSound==='function') playFelixAdminSound(message.sound);
-  return;
-}
 if(message.type === "system_status"){ showSystemStatus(message.status||""); return; }
 if(message.type==='timeout'){ showTimeout(message.until,message.by); }
 if(message.type==='timeout_ended'){ clearTimeoutOverlay(); loadUser(); }
@@ -3035,7 +2821,7 @@ if(message.type === "reaction"){
 if(message.type==='group_added'){api('/groups').then(g=>{featureGroups=g;renderFriends();if(message.notification)showGroupToast(message.notification);}).catch(()=>{});}
 if(message.type === "group_message"){
   if(activeGroup && message.message?.gid===activeGroup.gid) appendGroupMessage(message.message);
-  if(message.message?.from!==me?.uid){ playFelixNotificationSound(); if(browserNotificationsEnabled && document.hidden) new Notification('Felix Chat',{body:(message.message?.text||'New group message').slice(0,100)}); }
+  if(browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid) new Notification('Felix Chat',{body:(message.message?.text||'New group message').slice(0,100)});
 }
 if(message.type === "typing"){
   if(activeFriend && message.uid===activeFriend.uid){ const el=$('featureTypingIndicator'); if(el)el.textContent=message.typing?'Typing…':''; }
@@ -3043,7 +2829,7 @@ if(message.type === "typing"){
 if(message.type === "group_typing"){
   if(activeGroup && message.uid!==me?.uid && message.typing){ const el=$('featureTypingIndicator'); if(el)el.textContent='Someone is typing…'; setTimeout(()=>{if(el)el.textContent=''},1200); }
 }
-if(message.type === "message" && message.message?.from!==me?.uid){ playFelixNotificationSound(); if(browserNotificationsEnabled && document.hidden){ const from=message.message?.from||''; new Notification('Felix Chat',{body:(message.message?.text||'New message').slice(0,100),data:{from}}); } }
+if(message.type === "message" && browserNotificationsEnabled && document.hidden && message.message?.from!==me?.uid){ new Notification('Felix Chat',{body:(message.message?.text||'New message').slice(0,100)}); }
 function showRankToast(title,detail){
   const old=document.querySelector('.rank-toast'); if(old) old.remove();
   const el=document.createElement('div'); el.className='rank-toast';
@@ -3192,16 +2978,11 @@ async function openAdminPanel(){
   try{
     const status=await api('/admin/status');
     if(!status.admin)return alert('Admin access required');
-    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><div style="margin-top:12px;padding:12px;border:1px solid rgba(255,255,255,.14);border-radius:14px"><div class="small" style="margin-bottom:8px">🔊 Admin Soundboard</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="playAdminSound('verity')">🔊 Verity</button><button class="btn" onclick="playAdminSound('german')">🔊 German</button><button class="btn" onclick="playAdminSound('anime')">🔊 Anime</button></div></div><button class="btn" onclick="openBulkGrant()" style="margin-top:8px;width:100%">🎁 Grant Tags / Items</button><button class="btn" onclick="openServerStatusPanel()" style="margin-top:8px;width:100%">Server Status</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
+    openModal(`<button class="admin-tools-exit" onclick="closeModal()" title="Exit">✕</button><div class="admin-tools-header"><h2>🛡️ FelixChat Admin</h2></div><p class="small">Only @felixchat can grant or revoke powers. Mods can ban/unban but cannot change roles.</p><div class="admin-tools-search"><input id="adminUserSearch" class="input" placeholder="Search username..." onkeydown="if(event.key==='Enter')refreshAdminUsers()"><button class="btn primary" onclick="refreshAdminUsers()">Search</button></div><div id="adminUserResults" class="admin-tools-results">Loading...</div><button class="btn primary" onclick="openAnnouncementComposer()" style="margin-top:12px;width:100%">📢 Announce</button><button class="btn" onclick="openBulkGrant()" style="margin-top:8px;width:100%">🎁 Grant Tags / Items</button><button class="btn" onclick="openServerStatusPanel()" style="margin-top:8px;width:100%">Server Status</button><button class="btn" onclick="closeModal()" style="margin-top:8px;width:100%">Exit Admin Panel</button>`);
     $("modalBox").classList.add("admin-tools-box");
     await refreshAdminUsers();
   }catch(e){alert(e.message)}
 }
-async function playAdminSound(sound){
-  try{ await api('/admin/soundboard',{method:'POST',body:JSON.stringify({sound})}); }
-  catch(e){ alert(e.message||'Could not play sound'); }
-}
-
 async function openModPanel(){
   if(!['admin','mod'].includes(String(me?.role||'').toLowerCase()))return alert('Moderator access required');
   try{
@@ -3971,6 +3752,11 @@ window.createFeatureGroup=createGroupWizard;
 
 <script id="felix-profile-score-upgrade">
 (function(){
+ const oldFetch=window.fetch;
+ window.fetch=async function(...args){
+   const r=await oldFetch.apply(this,args);
+   return r;
+ };
  async function enhance(){
    document.querySelectorAll('[data-profile-uid]').forEach(async el=>{
      if(el.dataset.felixEnhanced) return;
@@ -3984,16 +3770,7 @@ window.createFeatureGroup=createGroupWizard;
      }catch(e){}
    });
  }
- enhance();
- const root=document.body;
- if(root && window.MutationObserver){
-   let queued=false;
-   const observer=new MutationObserver(()=>{
-     if(queued) return; queued=true;
-     requestAnimationFrame(()=>{queued=false; enhance();});
-   });
-   observer.observe(root,{childList:true,subtree:true});
- }
+ setInterval(enhance,700);
 })();
 </script>
 
@@ -4286,334 +4063,6 @@ window.createFeatureGroup=createGroupWizard;
 
 <!-- Removed the floating side shortcut symbols. Features remain accessible through normal menus and / commands. -->
 
-
-<script>
-window.__felixAdminSounds={};
-
-/* Reliable admin sound playback helper */
-window.__felixAudioUnlocked=false;
-window.__felixPendingAdminSound=null;
-window.__felixAdminSounds=window.__felixAdminSounds||{};
-function initFelixAdminAudio(){
-  ['verity','german','anime'].forEach(name=>{
-    const src='/sound-'+name+'.mp3';
-    let a=window.__felixAdminSounds[name];
-    if(!a){ a=new Audio(src); window.__felixAdminSounds[name]=a; }
-    a.preload='auto';
-    a.load();
-  });
-}
-function unlockFelixAdminAudio(){
-  if(window.__felixAudioUnlocked) return;
-  window.__felixAudioUnlocked=true;
-  initFelixAdminAudio();
-  if(window.__felixPendingAdminSound){
-    const pending=window.__felixPendingAdminSound;
-    window.__felixPendingAdminSound=null;
-    playFelixAdminSound(pending);
-  }
-}
-function playFelixAdminSound(name){
-  const srcMap={verity:'/sound-verity.mp3',german:'/sound-german.mp3',anime:'/sound-anime.mp3'};
-  if(!srcMap[name]) return;
-  initFelixAdminAudio();
-  const a=window.__felixAdminSounds[name];
-  a.pause();
-  a.currentTime=0;
-  a.volume=1;
-  a.muted=false;
-  a.play().catch(()=>{
-    window.__felixPendingAdminSound=name;
-  });
-}
-['pointerdown','touchstart','keydown','click'].forEach(ev=>{
-  document.addEventListener(ev,unlockFelixAdminAudio,{once:true,passive:true});
-});
-initFelixAdminAudio();
-
-['verity','german','anime'].forEach(name=>{const a=new Audio('/sound-'+name+'.mp3');a.preload='auto';window.__felixAdminSounds[name]=a;});
-</script>
-
-<style id="felix-ipad-deep-friends-fix">
-/* Tablet/iPad: never use clipping, column balancing, or content containment
-   on the actual server-rendered friends list. */
-@media (min-width:701px) and (max-width:1366px){
-  #friends{
-    display:block!important;
-    width:100%!important;
-    height:auto!important;
-    min-height:0!important;
-    max-height:none!important;
-    overflow:visible!important;
-    contain:none!important;
-    content-visibility:visible!important;
-    columns:1!important;
-  }
-  #friends>.friend{
-    display:flex!important;
-    visibility:visible!important;
-    opacity:1!important;
-    position:relative!important;
-    height:auto!important;
-    max-height:none!important;
-    overflow:visible!important;
-  }
-}
-</style>
-<script id="felix-ipad-deep-friends-script">
-(function(){
-  async function refreshTabletFriends(){
-    const w=Math.max(window.innerWidth||0,document.documentElement.clientWidth||0);
-    if(w<701 || w>1366 || !window.token || typeof window.api!=='function') return;
-    try{
-      const fresh=await window.api('/me',{cache:'no-store'});
-      if(fresh && Array.isArray(fresh.friends)){
-        const oldUid=window.activeFriend && window.activeFriend.uid;
-        window.me=fresh;
-        if(oldUid) window.activeFriend=fresh.friends.find(f=>String(f.uid)===String(oldUid))||null;
-        if(typeof window.renderFriends==='function') window.renderFriends();
-      }
-    }catch(e){ console.warn('Tablet friends refresh failed',e); }
-  }
-  window.addEventListener('pageshow',()=>setTimeout(refreshTabletFriends,250));
-  window.addEventListener('orientationchange',()=>setTimeout(refreshTabletFriends,500));
-  window.addEventListener('resize',()=>{
-    clearTimeout(window.__felixTabletFriendTimer);
-    window.__felixTabletFriendTimer=setTimeout(refreshTabletFriends,350);
-  });
-  document.addEventListener('visibilitychange',()=>{
-    if(!document.hidden) setTimeout(refreshTabletFriends,300);
-  });
-  setTimeout(refreshTabletFriends,800);
-})();
-</script>
-
-
-<!-- Felix UI polish / cross-device stability layer -->
-<style id="felix-ui-polish-v1">
-  :root{
-    --felix-ease:cubic-bezier(.22,.8,.24,1);
-    --felix-fast:160ms;
-    --felix-normal:240ms;
-  }
-  /* Never allow the friends collection to become a horizontal strip. */
-  #friends,
-  .friends,
-  #friendsList,
-  .friends-list,
-  .friendsPanel{
-    flex-direction:column!important;
-    flex-wrap:nowrap!important;
-    align-items:stretch!important;
-    justify-content:flex-start!important;
-    overflow-x:hidden!important;
-  }
-  #friends>.friend,
-  .friends>.friend,
-  #friendsList>.friend,
-  .friends-list>.friend,
-  .friendsPanel>.friend{
-    flex:0 0 auto!important;
-    width:100%!important;
-    max-width:100%!important;
-    box-sizing:border-box!important;
-    transform:none;
-  }
-  .friend{
-    transition:transform var(--felix-fast) var(--felix-ease),background var(--felix-fast) ease,box-shadow var(--felix-fast) ease,border-color var(--felix-fast) ease;
-    will-change:transform;
-  }
-  .friend:hover{transform:translateX(3px);}
-  .friend:active{transform:scale(.985);}
-  .friend.active{box-shadow:0 7px 24px rgba(0,0,0,.16);}
-  button,.btn,.icon-btn,.send,.friend,.story-card,.request,.notification-item,input,textarea,select{
-    -webkit-tap-highlight-color:transparent;
-  }
-  button,.btn,.icon-btn,.send{
-    transition:transform var(--felix-fast) var(--felix-ease),filter var(--felix-fast) ease,box-shadow var(--felix-fast) ease,opacity var(--felix-fast) ease;
-  }
-  button:hover,.btn:hover,.icon-btn:hover,.send:hover{filter:brightness(1.07);}
-  button:active,.btn:active,.icon-btn:active,.send:active{transform:scale(.975);}
-  input,textarea,select{
-    transition:border-color var(--felix-fast) ease,box-shadow var(--felix-fast) ease,background var(--felix-fast) ease;
-  }
-  input:focus,textarea:focus,select:focus{
-    outline:none;
-    box-shadow:0 0 0 3px rgba(139,92,246,.14);
-  }
-  .story-viewer{
-    opacity:0;
-    transition:opacity 180ms ease;
-  }
-  .story-viewer[style*="display: flex"]{opacity:1;}
-  .story-viewer-box{transform:scale(.97);transition:transform 220ms var(--felix-ease);}
-  .story-viewer[style*="display: flex"] .story-viewer-box{transform:scale(1);}
-  .modal-box{will-change:transform,opacity;}
-  @media (prefers-reduced-motion:reduce){
-    *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important;}
-  }
-  @media (max-width:1180px){
-    #friends>.friend,.friends>.friend{min-width:0!important;}
-    .friend-info{min-width:0!important;max-width:100%!important;}
-  }
-</style>
-<script id="felix-ui-stability-v1">
-(function(){
-  const storyIsOpen=()=>{
-    const v=document.getElementById('storyViewer');
-    return !!v && getComputedStyle(v).display!=='none';
-  };
-  window.__felixCloseStoryForNavigation=function(){
-    try{ if(storyIsOpen() && typeof window.closeStory==='function') window.closeStory(); }catch(_){ }
-  };
-  // Any navigation-like control closes the full-screen story layer first.
-  document.addEventListener('click',function(e){
-    const viewer=document.getElementById('storyViewer');
-    if(viewer && viewer.contains(e.target)) return;
-    const control=e.target.closest?.('button,a,[role="button"]');
-    if(control && !control.closest('#storyViewer')) window.__felixCloseStoryForNavigation();
-  },true);
-  document.addEventListener('keydown',function(e){
-    if(e.key==='Escape') window.__felixCloseStoryForNavigation();
-  });
-  document.addEventListener('visibilitychange',function(){
-    if(document.hidden) window.__felixCloseStoryForNavigation();
-  });
-  window.addEventListener('pagehide',window.__felixCloseStoryForNavigation);
-
-  // Keep the friends list vertical after every existing render wrapper runs.
-  function lockFriendsLayout(){
-    document.querySelectorAll('#friends,.friends,#friendsList,.friends-list,.friendsPanel').forEach(list=>{
-      list.style.flexDirection='column';
-      list.style.flexWrap='nowrap';
-      list.style.alignItems='stretch';
-      list.style.overflowX='hidden';
-      list.querySelectorAll(':scope > .friend').forEach(row=>{
-        row.style.width='100%';
-        row.style.maxWidth='100%';
-        row.style.flex='0 0 auto';
-        row.style.boxSizing='border-box';
-      });
-    });
-  }
-  const oldRender=window.renderFriends;
-  if(typeof oldRender==='function' && !window.__felixFinalFriendsLock){
-    window.__felixFinalFriendsLock=true;
-    window.renderFriends=function(){
-      const result=oldRender.apply(this,arguments);
-      requestAnimationFrame(lockFriendsLayout);
-      return result;
-    };
-  }
-  window.addEventListener('resize',lockFriendsLayout,{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(lockFriendsLayout,100),{passive:true});
-  setTimeout(lockFriendsLayout,250);
-  setTimeout(lockFriendsLayout,1000);
-})();
-</script>
-
-<script id="felix-chat-size-control">
-(function(){
-  const handle=document.getElementById('felixResizeHandle');
-  const sidebar=document.querySelector('.sidebar');
-  if(!handle || !sidebar) return;
-  const root=document.documentElement;
-  const KEY='felix_chat_width_v2';
-  const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
-  function apply(width,save=true){
-    const max=Math.max(320,Math.floor(window.innerWidth*0.60));
-    width=clamp(Number(width)||320,220,max);
-    root.style.setProperty('--felix-sidebar-width',width+'px');
-    if(save){try{localStorage.setItem(KEY,String(width));}catch(e){}}
-  }
-  let saved=320;
-  try{saved=Number(localStorage.getItem(KEY))||320;}catch(e){}
-  apply(saved,false);
-  let dragging=false;
-  let startX=0,startW=0;
-  function begin(e){
-    if(window.matchMedia('(max-width:700px)').matches) return;
-    dragging=true; startX=e.clientX; startW=sidebar.getBoundingClientRect().width;
-    handle.classList.add('dragging'); document.body.classList.add('felix-resizing');
-    try{handle.setPointerCapture(e.pointerId);}catch(_){}
-    e.preventDefault();
-  }
-  function move(e){
-    if(!dragging) return;
-    apply(startW+(e.clientX-startX),false);
-    e.preventDefault();
-  }
-  function end(){
-    if(!dragging) return; dragging=false; handle.classList.remove('dragging'); document.body.classList.remove('felix-resizing');
-    const w=sidebar.getBoundingClientRect().width; apply(w,true);
-  }
-  handle.addEventListener('pointerdown',begin);
-  handle.addEventListener('pointermove',move);
-  handle.addEventListener('pointerup',end);
-  handle.addEventListener('pointercancel',end);
-  window.addEventListener('resize',()=>{ if(!dragging) apply(sidebar.getBoundingClientRect().width,false); },{passive:true});
-})();
-</script>
-
-<style id="felix-performance-polish">
-body.felix-resizing,.felix-resizing *{cursor:col-resize!important;user-select:none!important}
-.messages,.friends{scrollbar-gutter:stable}
-@media(prefers-reduced-motion:reduce){.felix-resize-handle::after{transition:none!important}}
-</style>
-
-<script id="felix-overlay-arbiter-v2">
-(function(){
-  const modal=document.getElementById('modal');
-  const story=document.getElementById('storyViewer');
-  const sync=()=>{
-    const modalOpen=!!modal && getComputedStyle(modal).display!=='none';
-    const storyOpen=!!story && getComputedStyle(story).display!=='none';
-    document.body.classList.toggle('felix-modal-open',modalOpen);
-    document.body.classList.toggle('felix-story-open',!modalOpen && storyOpen);
-  };
-  const hideStory=()=>{
-    try{ if(typeof window.closeStory==='function') window.closeStory(); }catch(_){}
-    if(story){story.style.display='none';story.style.pointerEvents='none';}
-    sync();
-  };
-  const hideModal=()=>{
-    if(modal){modal.style.display='none';modal.style.pointerEvents='none';}
-    sync();
-  };
-  window.__felixSyncOverlays=sync;
-  window.__felixCloseAllTransientOverlays=function(){hideStory();};
-  // Patch the central modal helpers so every normal menu automatically owns the screen.
-  const patch=()=>{
-    if(typeof window.openModal==='function' && !window.__felixModalPatched){
-      const original=window.openModal;
-      window.openModal=function(){ hideStory(); original.apply(this,arguments); if(modal)modal.style.pointerEvents='auto'; sync(); };
-      window.__felixModalPatched=true;
-    }
-    if(typeof window.closeModal==='function' && !window.__felixCloseModalPatched){
-      const original=window.closeModal;
-      window.closeModal=function(){ original.apply(this,arguments); if(modal)modal.style.pointerEvents='none'; sync(); };
-      window.__felixCloseModalPatched=true;
-    }
-  };
-  patch();
-  setTimeout(patch,0);setTimeout(patch,500);setTimeout(patch,1500);
-  const observer=new MutationObserver(sync);
-  if(modal)observer.observe(modal,{attributes:true,attributeFilter:['style','class']});
-  if(story)observer.observe(story,{attributes:true,attributeFilter:['style','class']});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(storyOpenNow())hideStory();else if(modalOpenNow())hideModal();}},true);
-  function storyOpenNow(){return story && getComputedStyle(story).display!=='none';}
-  function modalOpenNow(){return modal && getComputedStyle(modal).display!=='none';}
-  // Clicking a normal navigation/menu control always dismisses story first.
-  document.addEventListener('click',e=>{
-    const target=e.target.closest?.('button,a,[role="button"]');
-    if(!target || target.closest('#storyViewer')) return;
-    if(storyOpenNow() && !target.closest('.story-card')) hideStory();
-  },true);
-  window.addEventListener('resize',sync,{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(sync,80),{passive:true});
-  sync();
-})();
-</script>
 </body>
 
 <style>
@@ -4958,255 +4407,5 @@ window.openTradeCenter=openTradeCenter;window.openTradeWith=openTradeWith;window
  };
  const oldLabel=window.userLabel; window.userLabel=function(u){const base=escapeHtml(u.displayName||u.username||'User');const tags=(u.equippedTags||u.tags||[]).slice(0,5).map(t=>`<span class="felix-tag ${rarityClass(t.rarity)}">${escapeHtml(t.name)}</span>`).join('');return `${base} ${tags}`};
  const style=document.createElement('style');style.textContent=`.felix-tag{display:inline-block;margin:2px 3px 2px 0;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#273043;border:1px solid rgba(255,255,255,.18);vertical-align:middle}.equipped-top{margin:4px 0 8px}.owned-tag{margin:4px;padding:6px 9px;border-radius:999px;border:1px solid #43506a;background:#202a3d;color:#fff;cursor:pointer}.owned-tag:hover{transform:translateY(-1px);filter:brightness(1.25)}.owned-tag.equipped{outline:2px solid #fff;box-shadow:0 0 10px #fff}.felix-tag.uncommon,.owned-tag.uncommon{box-shadow:0 0 8px #35b76a}.felix-tag.rare,.owned-tag.rare{box-shadow:0 0 9px #3388ff}.felix-tag.epic,.owned-tag.epic{box-shadow:0 0 10px #a855f7}.felix-tag.legendary,.owned-tag.legendary{box-shadow:0 0 12px #f5b942}.felix-tag.mythic,.owned-tag.mythic{box-shadow:0 0 14px #ff4fd8}.felix-tag-list{line-height:2.2}`;document.head.appendChild(style);
-})();
-</script>
-
-<!-- Official badges in chat/header; collectible tags only in friends/profile -->
-<style>
-.felix-equipped-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;max-width:100%}
-.felix-equipped-tags .felix-tag{white-space:nowrap;display:inline-flex;align-items:center}
-.friend-info .official-badges{display:inline-flex;gap:4px;flex-wrap:wrap;vertical-align:middle}
-</style>
-<script>
-(function(){
-  function officialBadges(u){
-    const r=String(u?.role||'member').toLowerCase();
-    let out='';
-    if(u?.verified) out+='<span class="verified-tick" title="Verified">✓</span>';
-    if(r==='developer'||r==='dev') out+='<span class="role-badge admin" title="Developer">DEV</span>';
-    else if(r==='admin') out+='<span class="role-badge admin" title="Admin">ADMIN</span>';
-    else if(r==='mod'||r==='moderator') out+='<span class="role-badge mod" title="Moderator">MOD</span>';
-    else if(r==='vip') out+='<span class="role-badge vip" title="VIP">VIP</span>';
-    return out;
-  }
-  function cleanName(u){ return escapeHtml(u?.displayName||u?.username||'User'); }
-  function officialLabel(u){ return cleanName(u)+' <span class="official-badges">'+officialBadges(u)+'</span>'; }
-  function equippedLabel(u){
-    const tags=(u?.equippedTags||u?.tags||[]).slice(0,5);
-    return tags.length?'<div class="felix-equipped-tags">'+tags.map(t=>'<span class="felix-tag '+rarityClass(t.rarity)+'">'+escapeHtml(t.name)+'</span>').join('')+'</div>':'';
-  }
-  // Chat/header names: official badges only (Verified, DEV/Admin/Mod/VIP).
-  window.userLabel=function(u){ return officialLabel(u); };
-
-  // Friends menu: official badges plus up to 5 equipped collectible tags.
-  const previousRender=window.renderFriends;
-  window.renderFriends=function(){
-    if(typeof previousRender==='function') previousRender();
-    document.querySelectorAll('#friends .friend').forEach((el,i)=>{
-      const f=(window.me?.friends||[])[i];
-      if(!f || el.classList.contains('group-friend')) return;
-      const name=el.querySelector('.friend-info b');
-      if(name) name.innerHTML=officialLabel(f);
-      const info=el.querySelector('.friend-info');
-      if(info){ const old=info.querySelector('.felix-equipped-tags'); if(old) old.remove(); info.insertAdjacentHTML('beforeend',equippedLabel(f)); }
-    });
-  };
-
-  // Re-render after load so the friends menu always gets collectible tags.
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>window.renderFriends&&window.renderFriends(),300));
-})();
-</script>
-<style>
-@media (max-width: 700px){
-  #friends{overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;max-height:calc(100vh - 150px)!important;height:auto!important;min-height:0!important;padding-bottom:24px!important;}
-  .sidebar{height:100dvh!important;min-height:0!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;}
-  .sidebar #friends{flex:1 1 auto!important;}
-}
-</style>
-<script>
-(function(){
-  window.showNotifications=async function(){
-    try{
-      const notes=await api('/notifications/unread');
-      let box=document.getElementById('felixNotificationModal');
-      if(!box){box=document.createElement('div');box.id='felixNotificationModal';box.className='modal-overlay';document.body.appendChild(box);}
-      box.innerHTML='<div class="modal" style="max-width:520px"><div class="modal-header"><h2>🔔 Notifications</h2><button class="close-btn" onclick="document.getElementById(\'felixNotificationModal\').remove()">×</button></div><div class="notification-list">'+(notes.length?notes.map(n=>`<div class="notification-item" data-uid="${escapeHtml(n.uid)}"><b>@${escapeHtml(n.username)}</b><div class="small">${escapeHtml(n.text||'Sent you a message')}</div></div>`).join(''):'<div class="small" style="padding:16px">No new notifications.</div>')+'</div></div>';
-      box.querySelectorAll('.notification-item[data-uid]').forEach(el=>el.onclick=async()=>{
-        const uid=el.dataset.uid;
-        const friend=(me.friends||[]).find(f=>String(f.uid)===String(uid));
-        if(friend){box.remove();await selectFriend(friend);}
-      });
-      box.onclick=e=>{if(e.target===box)box.remove();};
-    }catch(e){alert('Could not load notifications: '+(e.message||'Something went wrong'));}
-  };
-})();
-</script>
-
-<style>@media(max-width:700px){#friendsList,.friends-list,.friendsPanel{max-height:calc(100vh - 130px)!important;height:calc(100vh - 130px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;}}</style>
-<!-- Mobile friends-first layout fix: keep every command, give friends most of the screen -->
-<style>
-@media (max-width:700px){
-  html,body{height:100dvh!important;overflow:hidden!important;background:#0b0d12!important}
-  .app{height:100dvh!important;overflow:hidden!important}
-  .sidebar{
-    height:100dvh!important;
-    box-sizing:border-box!important;
-    display:flex!important;
-    flex-direction:column!important;
-    overflow-y:auto!important;
-    overflow-x:hidden!important;
-    -webkit-overflow-scrolling:touch!important;
-    overscroll-behavior-y:contain!important;
-    padding-bottom:calc(82px + env(safe-area-inset-bottom))!important;
-    background:inherit!important;
-  }
-  /* Friends are the main mobile content and get almost the whole viewport. */
-  #friends,.friends,#friendsList,.friends-list,.friendsPanel{
-    display:block!important;
-    width:100%!important;
-    box-sizing:border-box!important;
-    flex:0 0 auto!important;
-    height:calc(100dvh - 185px)!important;
-    min-height:calc(100dvh - 185px)!important;
-    max-height:none!important;
-    overflow-y:auto!important;
-    overflow-x:hidden!important;
-    -webkit-overflow-scrolling:touch!important;
-    touch-action:pan-y!important;
-    overscroll-behavior:contain!important;
-    padding-bottom:18px!important;
-  }
-  .friend{
-    width:100%!important;
-    box-sizing:border-box!important;
-    min-height:66px!important;
-    margin:4px 0!important;
-    padding:10px!important;
-  }
-  /* Keep all other buttons/commands below the friends area; nothing is removed. */
-  .sidebar > :not(#friends):not(.friends):not(#friendsList):not(.friends-list):not(.friendsPanel){
-    flex:0 0 auto!important;
-  }
-  .mobile-nav{z-index:50!important;}
-}
-</style>
-<!-- Mobile cleanup: remove the unwanted dark/blue spacer panel without changing controls -->
-<style id="mobile-rectangle-cleanup">
-@media(max-width:700px){
-  body.mobile-chat-open .chat{background:#080b16!important;}
-  body.mobile-chat-open .story-strip:empty{display:none!important;}
-  body.mobile-chat-open .composer{
-    margin:0!important;
-    background:#080b16!important;
-    background-image:none!important;
-    border-top:0!important;
-    box-shadow:none!important;
-    backdrop-filter:none!important;
-  }
-  body.mobile-chat-open .messages{
-    margin:0!important;
-    background:#080b16!important;
-  }
-}
-</style>
-
-<!-- Final mobile cleanup: remove duplicate bottom HUD/navigation; keep the chat input and friend picker. -->
-<style id="mobile-bottom-hud-removed">
-@media(max-width:768px){
-  .mobile-nav,#mobileNav{display:none!important;}
-  .sidebar{padding-bottom:max(14px,env(safe-area-inset-bottom))!important;}
-  body:not(.mobile-chat-open) .sidebar{padding-bottom:max(14px,env(safe-area-inset-bottom))!important;}
-}
-</style>
-
-<!-- Portrait mobile final fix: hide the unused chat panel/spacer, keep friends and the real chat composer -->
-<style id="portrait-mobile-square-fix">
-@media (max-width:768px) and (orientation:portrait){
-  html,body{background:#080914!important;}
-  .app{display:block!important;width:100vw!important;height:100dvh!important;overflow:hidden!important;background:#080914!important;}
-  /* On the friends screen there must be no second chat panel underneath it. */
-  body:not(.mobile-chat-open):not(.felix-ios-chat-open) .chat{
-    display:none!important;
-    position:static!important;
-    width:0!important;height:0!important;
-    min-height:0!important;min-width:0!important;
-    margin:0!important;padding:0!important;
-    overflow:hidden!important;
-  }
-  body:not(.mobile-chat-open):not(.felix-ios-chat-open) .sidebar{
-    display:flex!important;
-    width:100vw!important;
-    height:100dvh!important;
-    min-height:100dvh!important;
-    margin:0!important;
-    padding:10px 12px max(14px,env(safe-area-inset-bottom))!important;
-    overflow-y:auto!important;
-    overflow-x:hidden!important;
-    background:#0d1320!important;
-  }
-  /* Remove only empty visual spacer surfaces, not buttons or the chat input. */
-  .mobile-nav,#mobileNav{display:none!important;}
-}
-</style>
-<style>
-/* FINAL MOBILE VIEWPORT FIX: force the app to start at the top and fill the phone. */
-@media (max-width:700px) and (orientation:portrait){
-  html, body { margin:0!important; padding:0!important; width:100%!important; min-height:100%!important; height:100dvh!important; overflow:hidden!important; }
-  body { position:fixed!important; inset:0!important; }
-  .app { position:absolute!important; top:0!important; left:0!important; right:0!important; bottom:0!important; width:100%!important; height:100dvh!important; min-height:100dvh!important; max-height:none!important; transform:none!important; }
-  .sidebar { position:absolute!important; top:0!important; left:0!important; width:100%!important; height:100dvh!important; min-height:100dvh!important; max-height:none!important; margin:0!important; transform:none!important; overflow-y:auto!important; -webkit-overflow-scrolling:touch; }
-  .chat { position:absolute!important; top:0!important; left:0!important; width:100%!important; height:100dvh!important; min-height:100dvh!important; max-height:none!important; margin:0!important; transform:none!important; }
-}
-</style>
-<style>
-/* iPad/tablet friends list: use the available screen and never collapse to one row */
-@media (min-width: 600px) and (max-width: 1024px){
-  .friends{display:block!important;max-height:calc(100dvh - 170px)!important;height:auto!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;padding-bottom:24px!important}
-  .friend{display:flex!important;width:100%!important;min-height:64px!important;visibility:visible!important;opacity:1!important}
-}
-</style>
-<script>
-/* Felix custom in-app notification sound */
-window.__felixNotificationSound = new Audio('/felix-notification.mp3');
-window.__felixNotificationSound.preload='auto';
-window.playFelixNotificationSound=function(){try{const a=window.__felixNotificationSound;a.currentTime=0;a.play().catch(()=>{});}catch(e){}}
-</script>
-
-<!-- iPad/tablet friends reliability fix -->
-<style id="felix-ipad-all-friends-fix">
-/* Some tablet browsers were matching old responsive rules that hid/truncated
-   friend rows. Force every real friend row to remain visible on tablets. */
-@media (min-width:701px) and (max-width:1180px){
-  #friends{display:block!important;width:100%!important;max-height:none!important;height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;}
-  #friends>.friend{display:flex!important;visibility:visible!important;opacity:1!important;width:100%!important;min-height:58px!important;max-height:none!important;position:relative!important;transform:none!important;}
-  #friends>.friend:nth-child(n){display:flex!important;visibility:visible!important;opacity:1!important;}
-}
-@media (max-width:1180px){
-  #friends .friend[hidden]{display:flex!important;}
-}
-</style>
-<script id="felix-ipad-friends-data-fix">
-(function(){
-  /* Rebuild from the full server-provided friend array. This prevents an old
-     tablet-only render/cache path from leaving only the first rows onscreen. */
-  function ensureAllFriends(){
-    const list=document.getElementById('friends');
-    if(!list || !window.me || !Array.isArray(window.me.friends)) return;
-    const realRows=[...list.querySelectorAll('.friend:not(.group-friend)')];
-    if(realRows.length < window.me.friends.length && typeof window.renderFriends==='function'){
-      try{ window.renderFriends(); }catch(e){ console.warn('Friends redraw failed',e); }
-    }
-    [...list.querySelectorAll('.friend')].forEach(row=>{
-      row.style.display='flex'; row.style.visibility='visible'; row.style.opacity='1';
-      row.hidden=false;
-    });
-  }
-  const previous=window.renderFriends;
-  if(typeof previous==='function' && !window.__felixIpadFriendFix){
-    window.__felixIpadFriendFix=true;
-    window.renderFriends=function(){
-      const result=previous.apply(this,arguments);
-      requestAnimationFrame(ensureAllFriends);
-      return result;
-    };
-  }
-  window.addEventListener('resize',ensureAllFriends,{passive:true});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(ensureAllFriends,100);});
-  // Event-driven only: avoid a permanent 2s polling loop that wastes CPU.
-  const friendsRoot=document.getElementById('friends');
-  if(friendsRoot && window.MutationObserver){
-    const observer=new MutationObserver(()=>requestAnimationFrame(ensureAllFriends));
-    observer.observe(friendsRoot,{childList:true,subtree:true});
-  }
 })();
 </script>
