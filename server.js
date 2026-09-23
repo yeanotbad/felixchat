@@ -10,29 +10,6 @@ const webpush = require('web-push');
 
 const PORT = process.env.PORT || 3000;
 const app = express();
-// Signup abuse protection is based on the email/username being submitted, not IP.
-const registrationRate = new Map();
-function registrationKey(req){
-  const email=String(req.body?.email||'').trim().toLowerCase();
-  const username=String(req.body?.username||'').trim().toLowerCase();
-  return email || username || 'unknown';
-}
-function checkRegistrationRate(req){
-  const key=registrationKey(req), t=Date.now(), windowMs=10*60*1000;
-  let r=registrationRate.get(key);
-  if(!r || t-r.start>windowMs) r={start:t,count:0};
-  r.count++; registrationRate.set(key,r);
-  return r.count<=8;
-}
-setInterval(()=>{const t=Date.now(); for(const [key,r] of registrationRate) if(t-r.start>10*60*1000) registrationRate.delete(key);},5*60*1000).unref?.();
-// Per-challenge CAPTCHA: randomized, signed, short-lived, and single-use. No IP tracking.
-const CAPTCHA_SECRET = String(process.env.CAPTCHA_SECRET || process.env.RESEND_API_KEY || 'felix-chat-local-captcha-secret-change-me');
-const usedCaptchaTokens = new Map();
-function b64url(v){return Buffer.from(v).toString('base64url');}
-function signCaptcha(payload){const body=b64url(JSON.stringify(payload));const sig=crypto.createHmac('sha256',CAPTCHA_SECRET).update(body).digest('base64url');return body+'.'+sig;}
-function verifyCaptchaToken(token,answer){try{const parts=String(token||'').split('.');if(parts.length!==2)return false;const [body,sig]=parts;const expected=crypto.createHmac('sha256',CAPTCHA_SECRET).update(body).digest('base64url');if(sig.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))return false;const p=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));if(!p.nonce||Date.now()>Number(p.exp)||usedCaptchaTokens.has(p.nonce))return false;if(String(answer||'').trim()!==String(p.answer))return false;usedCaptchaTokens.set(p.nonce,Date.now()+120000);return true;}catch{return false;}}
-function makeCaptcha(){const a=crypto.randomInt(2,15),b=crypto.randomInt(2,15),op=['+','-','×'][crypto.randomInt(0,3)];const answer=op==='+'?a+b:op==='-'?a-b:a*b;const nonce=crypto.randomBytes(18).toString('hex'),exp=Date.now()+120000;return {question:`What is ${a} ${op} ${b}?`,token:signCaptcha({nonce,answer,exp}),expiresAt:exp};}
-setInterval(()=>{const t=Date.now();for(const [n,exp] of usedCaptchaTokens)if(exp<t)usedCaptchaTokens.delete(n);},60000).unref?.();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 const UPLOADS = path.join(__dirname, 'public', 'uploads');
@@ -106,9 +83,7 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS equipped_tags (uid TEXT NOT NULL,collectible_id TEXT NOT NULL,position INTEGER NOT NULL,PRIMARY KEY(uid,collectible_id))`,
     `CREATE TABLE IF NOT EXISTS trade_offers (id TEXT PRIMARY KEY,from_uid TEXT NOT NULL,to_uid TEXT NOT NULL,give_json TEXT NOT NULL,want_json TEXT NOT NULL,status TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_offers(to_uid,status,created_at)`,
-    `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`,
-    `CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS password_resets (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`
+    `CREATE TABLE IF NOT EXISTS quest_claims (uid TEXT NOT NULL, quest_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, PRIMARY KEY(uid,quest_id))`
   ], 'write');
   for (const sql of [
     `ALTER TABLE announcements ADD COLUMN audience TEXT DEFAULT 'all'`,
@@ -121,10 +96,8 @@ async function init() {
     `ALTER TABLE users ADD COLUMN status_text TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN banner TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN timeout_until INTEGER DEFAULT 0`,
-    `ALTER TABLE users ADD COLUMN timeout_by TEXT DEFAULT ''`,
-    `ALTER TABLE users ADD COLUMN email TEXT`
+    `ALTER TABLE users ADD COLUMN timeout_by TEXT DEFAULT ''`
   ]) { try { await db.execute(sql); } catch (e) {} }
-  try { await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email COLLATE NOCASE) WHERE email IS NOT NULL`); } catch (e) { console.error('email index',e); }
   // The @felixchat account is the sole owner of the admin powers.
   // This does not change any other account's role.
   try { await db.execute({sql:`UPDATE users SET role='admin' WHERE username='felixchat'`,args:[]}); } catch (e) {}
@@ -364,33 +337,6 @@ function broadcast(uid, payload) {
   for (const ws of set) if (ws.readyState === WebSocket.OPEN) ws.send(data);
 }
 function pair(a,b,payload){ broadcast(a,payload); broadcast(b,payload); }
-const DISPOSABLE_DOMAINS=new Set(['10minutemail.com','10minutemail.net','guerrillamail.com','guerrillamail.info','mailinator.com','tempmail.com','temp-mail.org','throwawaymail.com','yopmail.com','getnada.com','dispostable.com']);
-function isDisposableEmail(email){ const domain=String(email).toLowerCase().split('@').pop(); return DISPOSABLE_DOMAINS.has(domain); }
-async function sendPasswordResetEmail(email, code){
-  const key=String(process.env.RESEND_API_KEY||'').trim();
-  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
-  if(!key) throw new Error('Email sending is not configured.');
-  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat password reset code',html:`<h2>Reset your Felix Chat password</h2><p>Your 6-digit reset code is:</p><h1 style=\"letter-spacing:6px\">${code}</h1><p>This code expires in 10 minutes.</p>`})});
-  if(!r.ok) throw new Error('Could not send reset email.');
-}
-async function sendVerificationEmail(email, code){
-  const key=String(process.env.RESEND_API_KEY||'').trim();
-  const from=String(process.env.FROM_EMAIL||'Felix Chat <onboarding@resend.dev>').trim();
-  if(!key) throw new Error('Email sending is not configured. Add RESEND_API_KEY and FROM_EMAIL in Render.');
-  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'Your Felix Chat verification code',html:`<h2>Verify your Felix Chat account</h2><p>Your verification code is:</p><h1 style=\"letter-spacing:6px\">${code}</h1><p>This code expires in 10 minutes.</p>`})});
-  if(!r.ok){const txt=await r.text();throw new Error('Email provider error: '+txt.slice(0,160));}
-}
-async function equippedTagsFor(uid){
-  try{const r=await db.execute({sql:`SELECT c.id,c.name,c.rarity,c.value FROM equipped_tags e JOIN collectibles c ON c.id=e.collectible_id WHERE e.uid=? ORDER BY e.position LIMIT 5`,args:[uid]});return r.rows||[];}catch(_){return [];}
-}
-function broadcastAll(payload, excludeUid=null) {
-  const data=JSON.stringify(payload);
-  for(const [targetUid,set] of sockets){
-    if(excludeUid && targetUid===excludeUid) continue;
-    for(const ws of set) if(ws.readyState===WebSocket.OPEN) ws.send(data);
-  }
-}
-function broadcastPresence(uid, online){ broadcastAll({type:'presence_update',uid:String(uid),online:!!online,lastSeen:Date.now()}); }
 function publicUser(u, online=false){
   return { uid:u.uid, username:u.username, displayName:u.display_name || u.username, bio:u.bio || '', avatar:u.avatar || '', banner:u.banner || '', statusText:u.status_text || '', role:u.role || 'member', verified:Number(u.verified||0)===1, online, lastSeen:u.last_seen || 0, streak:u.streak || 0, timeoutUntil:Number(u.timeout_until||0), timeoutBy:u.timeout_by || '' };
 }
@@ -403,67 +349,34 @@ app.get('/api/cloudinary-config', auth, async (_req,res)=>{
   res.json({cloudName,uploadPreset});
 });
 
-app.get('/api/captcha', (_req,res)=>res.json(makeCaptcha()));
-
 app.post('/api/register', async (req,res)=>{
   try {
-    if(!verifyCaptchaToken(req.body.captchaToken,req.body.captchaAnswer)) return res.status(400).json({error:'CAPTCHA failed or expired. Please try a new challenge.'});
-    if(!checkRegistrationRate(req)) return res.status(429).json({error:'Too many signup attempts. Please try again later.'});
-    // Refuse registration if the database/server is unavailable, preventing partial accounts.
-    await db.execute('SELECT 1');
     const username=clean(req.body.username).toLowerCase();
-    const email=String(req.body.email||'').trim().toLowerCase();
     const password=String(req.body.password||'');
     if(!/^[a-z0-9_]{3,20}$/.test(username)) return res.status(400).json({error:'Username must be 3-20 letters, numbers or _'});
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email)) return res.status(400).json({error:'Enter a valid email address'});
-    if(isDisposableEmail(email)) return res.status(400).json({error:'Temporary or disposable email addresses are not allowed.'});
     if(password.length<6) return res.status(400).json({error:'Password must be at least 6 characters'});
-    const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=? OR lower(email)=?',args:[username,email]});
-    if(exists.rows.length) return res.status(409).json({error:'Username or email is already linked to an account'});
-    const pending=await db.execute({sql:'SELECT email FROM email_verifications WHERE username=? AND expires_at>?',args:[username,now()]});
-    if(pending.rows.length) return res.status(409).json({error:'That username is waiting for email verification'});
-    const salt=id(), code=String(Math.floor(100000+Math.random()*900000));
-    const expires=now()+10*60*1000;
-    await db.execute({sql:`INSERT INTO email_verifications(email,username,password_hash,salt,code_hash,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,0,?) ON CONFLICT(email) DO UPDATE SET username=excluded.username,password_hash=excluded.password_hash,salt=excluded.salt,code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0,created_at=excluded.created_at`,args:[email,username,hash(password,salt),salt,hash(code,email),expires,now()]});
-    await sendVerificationEmail(email,code);
-    res.json({ok:true,needsVerification:true,email});
-  } catch(e){console.error(e);res.status(500).json({error:e.message||'Could not send verification code'});}
+    const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=?',args:[username]});
+    if(exists.rows.length) return res.status(409).json({error:'Username already exists'});
+    const uid=id(),salt=id(),token=id(),t=now();
+    await db.batch([
+      {sql:'INSERT INTO users(uid,username,password_hash,salt,display_name,created_at,last_seen) VALUES(?,?,?,?,?,?,?)',args:[uid,username,hash(password,salt),salt,username,t,t]},
+      {sql:'INSERT INTO sessions(token,uid,created_at) VALUES(?,?,?)',args:[token,uid,t]}
+    ]);
+    res.json({token,username});
+  } catch(e){console.error(e);res.status(500).json({error:'Registration failed'});}
 });
-
-app.post('/api/verify-email', async (req,res)=>{
-  try{
-    const email=String(req.body.email||'').trim().toLowerCase(), code=String(req.body.code||'').trim();
-    const r=await db.execute({sql:'SELECT * FROM email_verifications WHERE email=?',args:[email]}); const v=r.rows[0];
-    if(!v) return res.status(404).json({error:'No verification request found. Sign up again.'});
-    if(Number(v.expires_at)<now()){await db.execute({sql:'DELETE FROM email_verifications WHERE email=?',args:[email]});return res.status(400).json({error:'That code expired. Please request a new one.'});}
-    if(Number(v.attempts)>=8) return res.status(429).json({error:'Too many incorrect attempts. Request a new code.'});
-    if(hash(code,email)!==v.code_hash){await db.execute({sql:'UPDATE email_verifications SET attempts=attempts+1 WHERE email=?',args:[email]});return res.status(400).json({error:'Incorrect verification code'});}
-    const exists=await db.execute({sql:'SELECT uid FROM users WHERE username=? OR lower(email)=?',args:[v.username,email]}); if(exists.rows.length)return res.status(409).json({error:'That username or email is already in use'});
-    const uid=id(), token=id(), t=now();
-    await db.batch([{sql:'INSERT INTO users(uid,username,email,password_hash,salt,display_name,created_at,last_seen) VALUES(?,?,?,?,?,?,?,?)',args:[uid,v.username,email,v.password_hash,v.salt,v.username,t,t]},{sql:'INSERT INTO sessions(token,uid,created_at) VALUES(?,?,?)',args:[token,uid,t]},{sql:'DELETE FROM email_verifications WHERE email=?',args:[email]}]);
-    res.json({ok:true,token,username:v.username});
-  }catch(e){console.error(e);res.status(500).json({error:'Verification failed'});}
-});
-
-app.post('/api/resend-verification', async (req,res)=>{
-  try{if(!verifyCaptchaToken(req.body.captchaToken,req.body.captchaAnswer))return res.status(400).json({error:'CAPTCHA failed or expired. Please try a new challenge.'});const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:'SELECT * FROM email_verifications WHERE email=?',args:[email]});const v=r.rows[0];if(!v)return res.status(404).json({error:'No pending verification found'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'UPDATE email_verifications SET code_hash=?,expires_at=?,attempts=0 WHERE email=?',args:[hash(code,email),now()+10*60*1000,email]});await sendVerificationEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not resend code'});}
-});
-
-app.post('/api/forgot-password', async (req,res)=>{try{const email=String(req.body.email||'').trim().toLowerCase();const r=await db.execute({sql:"SELECT email FROM users WHERE lower(COALESCE(email,''))=? LIMIT 1",args:[email]});if(!r.rows[0])return res.status(404).json({error:'No account was found with that email.'});const code=String(Math.floor(100000+Math.random()*900000));await db.execute({sql:'INSERT INTO password_resets(email,code_hash,expires_at,attempts,created_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0,created_at=excluded.created_at',args:[email,hash(code,email),now()+10*60*1000,0,now()]});await sendPasswordResetEmail(email,code);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:e.message||'Could not send reset code'});}});
-app.post('/api/reset-password', async (req,res)=>{try{const email=String(req.body.email||'').trim().toLowerCase(),code=String(req.body.code||'').trim(),password=String(req.body.password||'');if(password.length<6)return res.status(400).json({error:'Password must be at least 6 characters.'});const r=await db.execute({sql:'SELECT * FROM password_resets WHERE email=?',args:[email]}),v=r.rows[0];if(!v)return res.status(404).json({error:'No reset request found.'});if(Number(v.expires_at)<now())return res.status(400).json({error:'That code expired. Request a new one.'});if(Number(v.attempts)>=8)return res.status(429).json({error:'Too many incorrect attempts.'});if(hash(code,email)!==v.code_hash){await db.execute({sql:'UPDATE password_resets SET attempts=attempts+1 WHERE email=?',args:[email]});return res.status(400).json({error:'Incorrect reset code.'});}const u=(await db.execute({sql:"SELECT uid FROM users WHERE lower(COALESCE(email,''))=? LIMIT 1",args:[email]})).rows[0];const salt=crypto.randomBytes(16).toString('hex');await db.batch([{sql:'UPDATE users SET salt=?,password_hash=? WHERE uid=?',args:[salt,hash(password,salt),u.uid]},{sql:'DELETE FROM password_resets WHERE email=?',args:[email]},{sql:'DELETE FROM sessions WHERE uid=?',args:[u.uid]}]);res.json({ok:true});}catch(e){console.error(e);res.status(500).json({error:'Password reset failed'});}});
 
 app.post('/api/login', async (req,res)=>{
   try {
-    const identifier=String(req.body.username||req.body.email||req.body.identifier||'').trim().toLowerCase();
-    const password=String(req.body.password||'');
-    const r=await db.execute({sql:`SELECT * FROM users WHERE username=? OR lower(COALESCE(email,''))=? LIMIT 1`,args:[identifier,identifier]});
+    const username=clean(req.body.username).toLowerCase(), password=String(req.body.password||'');
+    const r=await db.execute({sql:'SELECT * FROM users WHERE username=?',args:[username]});
     const u=r.rows[0];
-    if(!u || u.password_hash!==hash(password,u.salt)) return res.status(401).json({error:'Wrong username/email or password'});
+    if(!u || u.password_hash!==hash(password,u.salt)) return res.status(401).json({error:'Wrong username or password'});
     if(Number(u.banned || 0) === 1) return res.status(403).json({error:'This account has been banned.'});
     const token=id(); await db.execute({sql:'INSERT INTO sessions(token,uid,created_at) VALUES(?,?,?)',args:[token,u.uid,now()]});
     await db.execute({sql:'UPDATE users SET last_seen=? WHERE uid=?',args:[now(),u.uid]});
-    res.json({token,username:u.username});
-  } catch(e){console.error(e);res.status(500).json({error:'Login failed'});}
+    res.json({token,username});
+  } catch(e){res.status(500).json({error:'Login failed'});}
 });
 
 app.post('/api/logout',auth,async(req,res)=>{const token=req.headers.authorization?.replace(/^Bearer\s+/i,'');await db.execute({sql:'DELETE FROM sessions WHERE token=?',args:[token]});res.json({ok:true});});
@@ -472,7 +385,7 @@ app.get('/api/me',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   const fr=await db.execute({sql:`SELECT u.* FROM users u JOIN friendships f ON f.friend_id=u.uid WHERE f.user_id=? AND f.status='accepted' ORDER BY u.username`,args:[req.uid]});
   const incoming=await db.execute({sql:`SELECT u.uid,u.username,u.display_name,u.avatar FROM users u JOIN friendships f ON f.user_id=u.uid WHERE f.friend_id=? AND f.status='pending'`,args:[req.uid]});
-  const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(x.uid); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
+  const friends=[]; for(const x of fr.rows){ const f=publicUser(x,(sockets.get(x.uid)?.size||0)>0); const sr=await db.execute({sql:'SELECT streak,last_day FROM friend_streaks WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]}); const srRow=sr.rows[0]; let sv=Number(srRow?.streak||0); if(srRow?.last_day){const diff=Math.round((Date.now()-new Date(srRow.last_day+'T00:00:00Z').getTime())/86400000); if(diff>1){sv=0; await db.execute({sql:'UPDATE friend_streaks SET streak=0 WHERE pair_key=?',args:[pairKey(req.uid,x.uid)]});}} f.streak=sv; f.streakLastDay=srRow?.last_day||''; friends.push(f); }
   res.json({uid:u.uid,username:u.username,displayName:u.display_name||u.username,bio:u.bio||'',avatar:u.avatar||'',role:u.role||'member',streak:u.streak||0,timeoutUntil:Number(u.timeout_until||0),timeoutBy:u.timeout_by||'',friends,requests:incoming.rows.map(x=>publicUser(x))});
 });
 
@@ -530,7 +443,7 @@ app.post('/api/profile/avatar',auth,async(req,res)=>{
 
 app.get('/api/friends',auth,async(req,res)=>{
   const r=await db.execute({sql:`SELECT u.* FROM friendships f JOIN users u ON u.uid=f.friend_id WHERE f.user_id=? AND f.status='accepted' ORDER BY lower(u.username)`,args:[req.uid]});
-  const out=[]; for(const u of r.rows){const f=publicUser(u,(sockets.get(u.uid)?.size||0)>0); f.equippedTags=await equippedTagsFor(u.uid); out.push(f);}
+  const out=r.rows.map(u=>publicUser(u,(sockets.get(u.uid)?.size||0)>0));
   res.json(out);
 });
 
@@ -709,16 +622,6 @@ async function requireModerator(req,res){
   }
   return true;
 }
-app.post('/api/admin/soundboard',auth,async(req,res)=>{
-  try{
-    const u=await getUser(req.uid);
-    if(String(u?.username||'').toLowerCase()!=='felixchat' || String(u?.role||'').toLowerCase()!=='admin') return res.status(403).json({error:'Only @felixchat can use the soundboard.'});
-    const sound=String(req.body?.sound||'');
-    if(!['verity','german','anime'].includes(sound)) return res.status(400).json({error:'Unknown sound.'});
-    broadcastAll({type:'admin_sound',sound});
-    res.json({ok:true});
-  }catch(e){res.status(500).json({error:'Could not broadcast sound.'});}
-});
 app.get('/api/admin/status',auth,async(req,res)=>{
   const u=await getUser(req.uid);
   res.json({admin:u?.username==='felixchat' && String(u.role||'')==='admin', moderator:['admin','mod'].includes(String(u?.role||'').toLowerCase()), role:u?.role||'member'});
@@ -991,7 +894,7 @@ app.delete('/api/groups/:gid/leave',auth,async(req,res)=>{
   }
 });
 
-wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set()); const wasOffline=(sockets.get(uid).size===0); sockets.get(uid).add(ws); if(wasOffline) broadcastPresence(uid,true); ws.send(JSON.stringify({type:'ready'}));
+wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JSON.parse(raw);if(m.type==='auth'){uid=await getUidFromToken(m.token);if(!uid)return ws.close(1008,'Unauthorized');if(!sockets.has(uid))sockets.set(uid,new Set());sockets.get(uid).add(ws);ws.send(JSON.stringify({type:'ready'}));
         try { const status=await getSystemStatus(); const authedUser=await getUser(uid); if(status && String(authedUser?.username||'').toLowerCase()!=='felixchat') ws.send(JSON.stringify({type:'system_status',status})); } catch(e) {}
         try{const r=await db.execute({sql:`SELECT a.*,u.username AS sender_username,u.display_name AS sender_display_name FROM announcements a JOIN users u ON u.uid=a.sender_id ORDER BY a.created_at DESC LIMIT 20`,args:[]});for(const a of r.rows){let ts=[];try{ts=JSON.parse(a.targets_json||'[]')}catch{}if(!(a.audience==='all'||ts.includes(uid)))continue;const seen=await db.execute({sql:'SELECT 1 FROM announcement_views WHERE announcement_id=? AND uid=?',args:[a.id,uid]});if(seen.rows.length)continue;const announcement={id:a.id,text:a.text||'',kind:a.kind||'text',url:a.url||'',name:a.name||'',mime:a.mime||'',time:a.created_at,senderUsername:a.sender_username,senderDisplayName:a.sender_display_name||a.sender_username};ws.send(JSON.stringify({type:'announcement',announcement}));await db.execute({sql:'INSERT OR IGNORE INTO announcement_views(announcement_id,uid,viewed_at) VALUES(?,?,?)',args:[a.id,uid,now()]});break;}}catch(e){}
         return;}if(uid&&m.type==='typing'&&m.to)broadcast(m.to,{type:'typing',uid,typing:!!m.typing});
@@ -1003,7 +906,7 @@ wss.on('connection',ws=>{let uid=null;ws.on('message',async raw=>{try{const m=JS
         if(uid&&m.type==='live_location'&&m.to&&await areFriends(uid,m.to)){
           const p=m.payload||{}; const lat=Number(p.lat),lon=Number(p.lon);
           if(Number.isFinite(lat)&&Number.isFinite(lon)) broadcast(m.to,{type:'live_location',from:uid,payload:{lat,lon,accuracy:Number(p.accuracy)||0,active:p.active!==false,at:Date.now()}});
-        }if(uid&&m.type==='group_typing'&&m.gid&&await groupMember(m.gid,uid))await broadcastGroup(m.gid,{type:'group_typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',async()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size){sockets.delete(uid);const seen=Date.now();try{await db.execute({sql:'UPDATE users SET last_seen=? WHERE uid=?',args:[seen,uid]});}catch(_){} broadcastPresence(uid,false);}});});
+        }if(uid&&m.type==='group_typing'&&m.gid&&await groupMember(m.gid,uid))await broadcastGroup(m.gid,{type:'group_typing',uid,typing:!!m.typing});if(uid&&['call_invite','call_accept','call_reject','call_signal','call_end'].includes(m.type)&&m.to&&await areFriends(uid,m.to)){broadcast(m.to,{type:m.type,from:uid,payload:m.payload||null,callType:m.callType||'audio'});}}catch(e){}});ws.on('close',()=>{if(!uid)return;const set=sockets.get(uid);if(!set)return;set.delete(ws);if(!set.size)sockets.delete(uid);});});
 
 setInterval(async()=>{try{await db.execute({sql:'DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM stories WHERE expires_at<=?',args:[now()]});await db.execute({sql:'DELETE FROM polls WHERE expires_at<=?',args:[now()]});}catch(e){}},60000);
 
