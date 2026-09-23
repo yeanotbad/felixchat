@@ -4794,3 +4794,50 @@ button[onclick="openQuickAdd()"]::before{content:"⚡ "}
   });
 })();
 </script>
+
+<!-- Final layout fix: the sidebar had picked up conflicting sizing rules from
+     earlier patches, which could squeeze the friend list down to a sliver.
+     This is the last CSS in the document so it always wins, and it gives the
+     friend list its own dedicated, scrollable area at any screen size. -->
+<style id="felix-friends-full-scroll-fix">
+html body .app{display:flex!important}
+html body .sidebar{
+  display:flex!important;
+  flex-direction:column!important;
+  flex:0 0 auto!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}
+@media(min-width:701px){
+  html body .sidebar{
+    width:340px!important;
+    min-width:340px!important;
+    max-width:340px!important;
+    height:100vh!important;
+    max-height:100vh!important;
+  }
+}
+@media(max-width:700px){
+  html body .sidebar{
+    width:100%!important;
+    height:100dvh!important;
+    max-height:100dvh!important;
+  }
+}
+#friends.friends{
+  display:block!important;
+  flex:1 1 auto!important;
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  width:100%!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+html body .friend{
+  width:100%!important;
+  min-width:0!important;
+  flex:0 0 auto!important;
+}
+</style>
