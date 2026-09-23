@@ -2037,12 +2037,22 @@ function showTimeout(until,by){
 }
 function clearTimeoutOverlay(){clearInterval(timeoutTimer);timeoutTimer=null;document.querySelector('.timeout-overlay')?.remove();}
 
+let loadUserSeq = 0;
 async function loadUser(){
+
+const seq = ++loadUserSeq;
 
 try{
 
-me =
-await api("/me");
+const data = await api("/me");
+
+// If another loadUser() call has started since this one began, its
+// result is newer than ours — drop this stale response instead of
+// letting it overwrite fresher data (this is what caused friends to
+// intermittently vanish or drop to 1).
+if(seq !== loadUserSeq) return;
+
+me = data;
 if(Number(me.timeoutUntil||0)>Date.now()) showTimeout(me.timeoutUntil,me.timeoutBy); else clearTimeoutOverlay();
 
 $("myName").textContent =
@@ -2052,11 +2062,22 @@ setAvatar($("myAvatar"),me);
 
 renderFriends();
 
-connectSocket();
+// Only (re)connect the socket if we don't already have a live one.
+// Previously this ran on every loadUser() call, and loadUser() fires
+// on almost every websocket event (friend requests, streak updates,
+// role changes, etc). That meant the socket was constantly being
+// closed and reopened, and any friend-list broadcast that arrived
+// during that reconnect gap was silently lost — which is what made
+// friends randomly disappear from the list.
+if(!socket || (socket.readyState!==WebSocket.OPEN && socket.readyState!==WebSocket.CONNECTING)){
+  connectSocket();
+}
 
 }
 
 catch{
+
+if(seq !== loadUserSeq) return;
 
 localStorage.removeItem(
 "felix_token"
@@ -4718,7 +4739,7 @@ button[onclick="openQuickAdd()"]::before{content:"⚡ "}
         '<button class="rail-btn active" title="Chats" type="button">💬</button>'+
         '<button class="rail-btn" id="railPeopleBtn" title="Find people" type="button">🔎</button>'+
         '<button class="rail-btn" id="railRequestsBtn" title="Friend requests" type="button">🔔<span id="railRequestCount" class="rail-count" style="display:none">0</span></button>'+
-        '<button class="rail-btn" id="railStoriesBtn" title="Stories" type="button">🎬</button>'+
+        '<button class="rail-btn" id="railStoriesBtn" title="FelixTok" type="button">🎬</button>'+
         '<div class="rail-spacer"></div>'+
         '<div class="rail-bottom">'+
           '<button class="rail-btn" id="railSettingsBtn" title="Profile settings" type="button">⚙️</button>'+
@@ -4733,7 +4754,7 @@ button[onclick="openQuickAdd()"]::before{content:"⚡ "}
         else if(btn){ btn.click(); }
       };
       rail.querySelector('#railRequestsBtn').onclick=proxyClick('.request-button');
-      rail.querySelector('#railStoriesBtn').onclick=proxyClick('button[onclick="showStories()"]');
+      rail.querySelector('#railStoriesBtn').onclick=function(){window.open('https://felixtok2-0.onrender.com/','_blank');};
       rail.querySelector('#railSettingsBtn').onclick=proxyClick('button[onclick="editProfile()"]');
       rail.querySelector('#railAvatar').onclick=proxyClick('#myAvatar');
 
